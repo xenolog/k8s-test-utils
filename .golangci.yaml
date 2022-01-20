@@ -1,0 +1,288 @@
+---
+run:
+  timeout: 5m
+  skip-files:
+    - "pkg/client/internalclientset/.*"
+    - "zz_generated\\."
+output:
+  uniq-by-line: false
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  modules-download-mode: mod
+  exclude-rules:
+    # # allow dot-importing ginkgo and gomega
+    # - linters: [golint, stylecheck]
+    #   source: '\. "github\.com/onsi/(gomega|ginkgo)"'
+    #   text: "should not use dot imports"
+    - linters: [stylecheck]
+      text: "ST1003:"
+    # ignore capitalised error strings for now
+    - linters: [stylecheck]
+      text: "ST1005:"
+    - linters: [golint, revive]
+      text: "error strings should not be capitalized or end with punctuation or a newline"
+    - linters: [golint, revive]
+      text: "context-keys-type: should not use basic type string as key in context.WithValue"
+    - linters: [staticcheck]
+      text: "SA1029"
+    - linters: [stylecheck]
+      text: "ST1016:"
+    - linters: [stylecheck]
+      text: "ST1017:"
+    - linters: [gocritic]
+      text: "commentFormatting: put a space between `//` and comment text"
+    - linters: [gocritic]
+      text: "hugeParam: in is heavy"
+      source: '\)\s+String\(\)\s+\(rv\s+string\)\s+\{' # Stringer interface
+    - linters: [staticcheck]
+      text: "pkg/client/fake"
+    - linters: [misspell]
+      text: "gratuitious" # netplan gratuitious-arp
+    - linters: [revive]
+      text: "var-naming:"
+    - linters: [revive]
+      text: "struct-tag: unknown option 'inline' in JSON tag"
+    - linters: [revive]
+      text: "defer: prefer not to defer inside loops"
+    - linters: [revive]
+      text: "unexported-naming:"
+      path: _test\.go
+    - linters: [forcetypeassert]
+      path: _test\.go
+linters:
+  disable-all: true
+  enable: # use `golangci-lint help linters` to get full list
+    - gofmt
+    # - goimports
+    - stylecheck
+    - govet
+    - goerr113
+    - staticcheck
+    - errcheck
+    - gocritic
+    - gocyclo
+    - prealloc
+    - gosimple
+    - misspell
+    - exportloopref
+    - unconvert
+    - nakedret
+    - deadcode
+    - ineffassign
+    - structcheck
+    - typecheck
+    - unused
+    - varcheck
+    # - unparam
+    # - goconst
+    - gosec
+    - noctx
+    - nolintlint
+    - predeclared
+    - forcetypeassert
+    - errorlint
+    - whitespace
+    - nilerr
+    # - thelper  # RTFM about it !!!
+    - revive
+    # - wsl
+    # - wrapcheck
+    # - funlen
+    # - forbidigo
+    # - dupl
+    # - nestif
+    #- gochecknoglobals
+    #- gochecknoinits
+    #- depguard
+    #- interfacer
+    # - unindent
+    # - rapcheck
+    # - paralleltest
+linters-settings:
+  goimports:
+    local-prefixes: github.com/Mirantis/kaas-ipam,gerrit.mcp.mirantis.com/kaas/core,github.com/Mirantis/lcm,github.com/metal3-io/baremetal-operator,sigs.k8s.io/cluster-api-provider-openstack
+  gocritic:
+    enabled-checks:
+      - appendAssign
+      - appendCombine
+      - argOrder
+      - assignOp
+      - badCall
+      - badCond
+      - badLock
+      - badRegexp
+      - boolExprSimplify
+      - builtinShadow
+      - builtinShadowDecl
+      - captLocal
+      - caseOrder
+      - commentedOutImport
+      - defaultCaseOrder
+      - deferUnlambda
+      - deprecatedComment
+      - docStub # ?????
+      - dupArg
+      - dupBranchBody
+      - dupCase
+      - dupImport
+      - dupSubExpr
+      - elseif
+      - emptyStringTest
+      - equalFold
+      - evalOrder
+      - exitAfterDefer
+      - filepathJoin
+      - flagDeref
+      - flagName
+      - hexLiteral
+      - hugeParam
+      - ifElseChain
+      - importShadow
+      - indexAlloc
+      - initClause # ?????
+      - mapKey
+      - methodExprCall
+      # - nestingReduce
+      - newDeref
+      - nilValReturn
+      - offBy1
+      - paramTypeCombine
+      - ptrToRefParam
+      - rangeExprCopy # !!!!!
+      - rangeValCopy
+      - regexpMust
+      - regexpPattern
+      - regexpSimplify
+      - singleCaseSwitch
+      - sloppyLen
+      - sloppyReassign
+      - sloppyTypeAssert
+      - sortSlice
+      - sqlQuery
+      - stringXbytes
+      - switchTrue
+      - truncateCmp
+      - typeAssertChain
+      - typeDefFirst
+      - typeSwitchVar
+      - typeUnparen
+      - underef
+      - unlabelStmt
+      - unlambda
+      - unnecessaryBlock
+      - unnecessaryDefer
+      - unslice
+      - valSwap
+      - weakCond
+      - wrapperFunc
+      - yodaStyleExpr
+    # disabled-checks:
+    #   - xxx
+    settings:
+      rangeValCopy:
+        sizeThreshold: 32 # size in bytes that makes the warning trigger (default 128)
+        skipTestFuncs: true
+      hugeParam:
+        sizeThreshold: 80 # size in bytes that makes the warning trigger (default 80)
+  govet:
+    check-shadowing: false # report about shadowed variables
+    # enable:
+    #   - atomicalign
+    #   - fieldalignment
+    # disable:
+    #   - shadow
+  revive:
+    rules:
+      # keep a full list here, disable rules with a comment if needed
+      - name: add-constant
+        arguments:
+          - maxLitCount: "3"
+            allowStrs: '"","/"'
+            allowInts: "0,1,2"
+        disabled: true # should be fixed in code
+      - name: argument-limit
+        disabled: true # no meaninful limit
+      - name: atomic
+      - name: bare-return
+        disabled: true # should be fixed in code
+      - name: blank-imports
+      - name: bool-literal-in-expr
+      - name: call-to-gc
+      - name: cognitive-complexity
+        disabled: true # hard to get any meaningful benchmark for this
+      - name: confusing-naming
+        disabled: true # should be fixed in code
+      - name: confusing-results
+      - name: constant-logical-expr
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: cyclomatic
+        disabled: true # hard to get any meaningful benchmark for this
+      - name: deep-exit
+      - name: defer
+      - name: dot-imports
+      - name: duplicated-imports
+      - name: early-return
+        disabled: true # should be fixed in code
+      - name: empty-block
+      - name: empty-lines
+      - name: error-naming
+      - name: error-return
+      - name: error-strings
+      - name: errorf
+      - name: exported
+      - name: file-header
+        disabled: true # we don't have any specific header
+      - name: flag-parameter
+        disabled: true # should be fixed in code
+      - name: function-length
+        disabled: true # should be fixed in code
+      - name: function-result-limit
+        #   arguments: [4]
+        disabled: true
+      - name: get-return
+      - name: identical-branches
+      - name: if-return
+        disabled: true # separating "return nil" makes for cleaner code sometimes
+      - name: import-shadowing
+      - name: imports-blacklist
+      - name: increment-decrement
+      - name: indent-error-flow
+      - name: line-length-limit
+        disabled: true # no limit necessary here
+      - name: max-public-structs
+        disabled: true # pkg/api exports lots of structs, no need to limit that
+      - name: modifies-parameter
+      - name: modifies-value-receiver
+      - name: package-comments
+      - name: range
+      - name: range-val-address
+      - name: range-val-in-closure
+      - name: receiver-naming
+      - name: redefines-builtin-id
+      - name: string-format
+      - name: string-of-int
+      - name: struct-tag
+      - name: superfluous-else
+      - name: time-naming
+      - name: unconditional-recursion
+      - name: unexported-naming
+      - name: unexported-return
+      - name: unhandled-error
+        arguments:
+          # print to stdout
+          - fmt.Print
+          - fmt.Printf
+          - fmt.Println
+        disabled: true # should be fixed in code
+      - name: unnecessary-stmt
+      - name: unreachable-code
+      - name: unused-parameter
+        disabled: true # should be fixed in code
+      - name: unused-receiver
+        disabled: true # this made code ugly
+      - name: var-declaration
+      - name: var-naming
+      - name: waitgroup-by-value
+###

@@ -12,6 +12,7 @@ import (
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	"github.com/xenolog/k8s-utils/pkg/utils"
 	apimErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -283,9 +284,33 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 			tmp := strings.Split(reflect.TypeOf(in.Object).String(), ".")
 			objType := tmp[len(tmp)-1]
 			klog.Infof("RCL: income event: %s [%s] '%s'", in.Type, objType, nName)
-
-			if err := r.doReconcile(ctx, kind, k8sObj, nil); err != nil {
-				klog.Errorf("RCL error: %s", err)
+			switch in.Type {
+			case watch.Deleted:
+				if len(k8sObj.GetFinalizers()) == 0 {
+					// no finalizers, object will be deleted by fake client
+					klog.Infof("RCL: deletion of [%s] '%s' done, no finalizers.", objType, nName)
+				} else {
+					// at least one finalizer found, DeletionTimestamp of the object should be set if absent
+					if k8sObj.GetDeletionTimestamp().IsZero() {
+						now := metav1.Now()
+						k8sObj.SetDeletionTimestamp(&now)
+						if err := r.client.Update(ctx, k8sObj); err != nil {
+							klog.Errorf("RCL Obj '%s' deletion error: %s", nName, err)
+						}
+						// MODIFY event will initiate Reconcile automatically
+						klog.Infof("RCL: DeletionTimestamp of [%s] '%s' is set.", objType, nName)
+					} else {
+						klog.Infof("RCL: DeletionTimestamp of [%s] '%s' is already found, the object was planned to delete earlier, try to reconcile.", objType, nName)
+						// Reconcile(...) should be initiated explicitly
+						if _, err := r.Reconcile(kind, nName.String()); err != nil {
+							klog.Errorf("RCL error: %s", err)
+						}
+					}
+				}
+			case watch.Added, watch.Modified:
+				if err := r.doReconcile(ctx, kind, k8sObj, nil); err != nil {
+					klog.Errorf("RCL error: %s", err)
+				}
 			}
 		}
 	}

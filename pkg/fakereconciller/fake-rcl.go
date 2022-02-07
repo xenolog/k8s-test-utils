@@ -79,13 +79,12 @@ func (r *fakeReconciller) getKindStruct(kind string) (*kindWatcherData, error) {
 	return rv, nil
 }
 
-func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj client.Object, respChan chan *ReconcileResponce) *ReconcileResponce {
+func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj client.Object) *ReconcileResponce {
 	var (
-		err           error
-		res           reconcile.Result
-		reconcileResp ReconcileResponce
-		startTime     time.Time
-		endTime       time.Time
+		err       error
+		res       reconcile.Result
+		startTime time.Time
+		endTime   time.Time
 	)
 
 	kindWatcherData, err := r.getKindStruct(kindName)
@@ -129,16 +128,11 @@ func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj 
 
 	res, err = kindWatcherData.reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nName})
 	endTime = time.Now()
-	reconcileResp = ReconcileResponce{
+	return &ReconcileResponce{
 		Result:          res,
 		Err:             err,
 		StartFinishTime: k8t.TimeInterval{startTime, endTime},
 	}
-	if respChan != nil {
-		respChan <- &reconcileResp
-		close(respChan)
-	}
-	return &reconcileResp
 }
 
 // Watch C/R/M/D events from fakeClient or user request.
@@ -161,7 +155,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 			klog.Infof("RCL: Watcher for %s finished", kind)
 			return
 		case req := <-taskChan:
-			klog.Infof("RCL: Req to reconcile: %s(%s)", kind, req.Key)
+			klog.Infof("RCL: %s '%s' Req to reconcile", kind, req.Key)
 			nName := utils.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
 			r.Lock()
@@ -172,8 +166,12 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 				break
 			}
 
-			rv := r.doReconcile(ctx, kind, obj, req.RespChan)
-			rvString := fmt.Sprintf("RCL: Reconcile %s(%s) result: %s", kind, req.Key, rv)
+			rv := r.doReconcile(ctx, kind, obj)
+			if req.RespChan != nil {
+				req.RespChan <- rv
+				close(req.RespChan)
+			}
+			rvString := fmt.Sprintf("RCL: %s '%s' Reconcile result: %s", kind, req.Key, rv)
 			if rv.Err != nil {
 				klog.Errorf(rvString)
 			} else {
@@ -190,7 +188,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 			}
 			tmp := strings.Split(reflect.TypeOf(in.Object).String(), ".")
 			objType := tmp[len(tmp)-1]
-			klog.Infof("RCL: income event: %s   %s(%s)", in.Type, objType, nName)
+			klog.Infof("RCL: event %s  %s '%s'", in.Type, objType, nName)
 			switch in.Type {
 			case watch.Deleted:
 				if len(k8sObj.GetFinalizers()) == 0 {

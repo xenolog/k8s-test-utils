@@ -2,6 +2,7 @@ package fakereconciller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -27,6 +28,10 @@ const (
 	ControlChanBuffSize = 8
 )
 
+var (
+	errStoppedFromTheOutside = errors.New("Stopped from the outside (main loop context cancelled or deadline expired)")
+)
+
 type reconcileRequest struct {
 	Key      string
 	RespChan chan *ReconcileResponce
@@ -49,9 +54,12 @@ type kindWatcherData struct {
 
 type fakeReconciller struct {
 	sync.Mutex
-	scheme *runtime.Scheme
-	kinds  map[string]*kindWatcherData
-	client client.WithWatch
+	scheme          *runtime.Scheme
+	kinds           map[string]*kindWatcherData
+	client          client.WithWatch
+	mainloopContext context.Context
+	watchersWG      sync.WaitGroup
+	userTasksWG     sync.WaitGroup
 }
 
 func (r *fakeReconciller) GetClient() client.WithWatch {
@@ -132,6 +140,7 @@ func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj 
 }
 
 func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, kind string) {
+	defer r.watchersWG.Done()
 	r.Lock()
 	taskChan := r.kinds[kind].askToReconcile
 	rcl := r.kinds[kind].reconciler
@@ -145,7 +154,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 		select {
 		case <-ctx.Done():
 			watcher.Stop()
-			klog.V(4).Infof("RCL: %s finished", kind)
+			klog.Infof("RCL: %s finished", kind)
 			return
 		case req := <-taskChan:
 			klog.Infof("RCL: Ask to reconcile: %s '%s'", kind, req.Key)
@@ -163,8 +172,6 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 				klog.Errorf("RCL error: %s", err)
 			}
 		case in := <-watcher.ResultChan():
-			// do_lock()
-			// defer do_unlock()
 			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {
 				panic("Wrong object passed from watcher")
@@ -211,6 +218,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 func (r *fakeReconciller) Run(ctx context.Context) {
 	r.Lock()
 	defer r.Unlock()
+	r.mainloopContext = ctx
 	for kind := range r.kinds {
 		list := &unstructured.UnstructuredList{}
 		list.SetKind(kind)
@@ -219,21 +227,27 @@ func (r *fakeReconciller) Run(ctx context.Context) {
 		if err != nil {
 			panic(err)
 		}
+		r.watchersWG.Add(1)
 		go r.doWatch(ctx, watcher, kind)
 	}
 }
 
-func (r *fakeReconciller) RunAndDeferWaitToFinish(ctx context.Context) func() {
-	r.Run(ctx)
-	klog.Warningf("RCL: deffered waiting of finishing loops is not implementing now.")
-	return func() {}
-}
+// todo(sv): will be better to implement in the future
+// RunAndDeferWaitToFinish -- run fakeReconciller loop and defer
+// Wait(...) function with infinity time to wait.
+// may be used as `defer rcl.RunAndDeferWaitToFinish(ctx)()` call
+// func (r *fakeReconciller) RunAndDeferWaitToFinish(ctx context.Context) func() {
+// 	r.Run(ctx)
+// 	klog.Warningf("RCL: deffered waiting of finishing loops is not implementing now.")
+// 	return func() {}
+// }
 
-// WaitToFinish -- wait to successfully finish all running fake reconcile loops
-// and user requested create/reconcile calls.
-func (r *fakeReconciller) WaitToFinish(waitTime time.Duration) error {
-	klog.Warningf("RCL: waiting of finishing loops is not implementing now.")
-	return nil
+// Wait -- wait to finish all running fake reconcile loops
+// and user requested create/reconcile calls. Like sync.Wait()
+// context, passed to Run(...) will be used to cancel all waiters.
+func (r *fakeReconciller) Wait() {
+	r.userTasksWG.Wait() // should be before watchersWG.Wait() !!!
+	r.watchersWG.Wait()
 }
 
 func (r *fakeReconciller) AddController(gvk *schema.GroupVersionKind, rcl NativeReconciller) error {

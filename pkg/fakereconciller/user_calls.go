@@ -13,6 +13,9 @@ import (
 )
 
 func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
+	if ctx == nil {
+		ctx = r.mainloopContext
+	}
 	kindWatcherData, err := r.getKindStruct(kindName)
 	if err != nil {
 		return nil, err
@@ -20,7 +23,9 @@ func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key
 	respChan := make(chan error, ControlChanBuffSize)
 	logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 
+	r.userTasksWG.Add(1)
 	go func() {
+		defer r.userTasksWG.Done()
 		defer close(respChan)
 		for {
 			r.Lock()
@@ -39,6 +44,10 @@ func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key
 				klog.Warningf("%s: reconciled earlier, than '%s' , waiting to fresh reconcile", logKey, reconciledAfter)
 			}
 			select {
+			case <-r.mainloopContext.Done():
+				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
+				respChan <- errStoppedFromTheOutside
+				return
 			case <-ctx.Done():
 				klog.Warningf("%s: %s", logKey, ctx.Err())
 				respChan <- ctx.Err()
@@ -64,6 +73,9 @@ func (r *fakeReconciller) WaitToBeReconciled(ctx context.Context, kindName, key 
 }
 
 func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) (chan error, error) {
+	if ctx == nil {
+		ctx = r.mainloopContext
+	}
 	rr, err := r.getKindStruct(kind)
 	if err != nil {
 		return nil, err
@@ -74,7 +86,9 @@ func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(*rr.gvk)
 
+	r.userTasksWG.Add(1)
 	go func() {
+		defer r.userTasksWG.Done()
 		defer close(respChan)
 		for {
 			err := r.client.Get(ctx, nName, obj)
@@ -95,6 +109,10 @@ func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string
 				klog.Warningf("%s: object exists, but status not found, waiting to reconcile", logKey)
 			}
 			select {
+			case <-r.mainloopContext.Done():
+				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
+				respChan <- errStoppedFromTheOutside
+				return
 			case <-ctx.Done():
 				klog.Warningf("%s: %s", logKey, ctx.Err())
 				respChan <- ctx.Err()

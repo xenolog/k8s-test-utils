@@ -12,7 +12,21 @@ import (
 )
 
 type FakeReconciller interface {
-	Run(context.Context)
+
+	// Run main loop to watch create/delete/reconcile requests.
+	// Context will be stored to use as fallback
+	Run(ctx context.Context)
+
+	// todo(sv): will be better to implement in the future
+	// RunAndDeferWaitToFinish -- run fakeReconciller loop and defer
+	// Wait(...) function with infinity time to wait.
+	// may be used as `defer rcl.RunAndDeferWaitToFinish(ctx)()` call
+	// RunAndDeferWaitToFinish(context.Context) func()
+
+	// Wait -- wait to finish all running fake reconcile loops
+	// and user requested create/reconcile calls. Like sync.Wait()
+	// context, passed to Run(...) will be used to cancel all waiters.
+	Wait()
 
 	// Reconcile -- invoke to reconcile the corresponded resource.
 	// Returns chan which can be used to obtain reconcile response and timings
@@ -21,23 +35,27 @@ type FakeReconciller interface {
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
 	// If isReconcilled if false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.
+	// If ctx == nil -- context, stored in the Run(...) will be used
 	WaitToBeCreated(ctx context.Context, kindName, key string, isReconcilled bool) error
 
 	// WatchToBeCreated -- run gorutine to wait while corresponded CRD will be created.
 	// If isReconcilled if false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.
-	// Do not block current gorutine,  error chan
+	// Does not block current gorutine,  error chan returned to obtain result if need
+	// If ctx == nil -- context, stored in the Run(...) will be used
 	WatchToBeCreated(ctx context.Context, kindName, key string, isReconcilled bool) (chan error, error)
 
 	// WaitToBeReconciled -- block gorutine while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
+	// If ctx == nil -- context, stored in the Run(...) will be used
 	WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error
 
 	// WatchToBeReconciled -- run gorutine to wait while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
-	// Do not block current gorutine, error chan
+	// Does not block current gorutine,  error chan returned to obtain result if need
+	// If ctx == nil -- context, stored in the Run(...) will be used
 	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error)
 
 	// AddController -- add reconciller to the monitor loop

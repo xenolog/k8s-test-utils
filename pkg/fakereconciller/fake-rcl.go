@@ -79,7 +79,7 @@ func (r *fakeReconciller) getKindStruct(kind string) (*kindWatcherData, error) {
 	return rv, nil
 }
 
-func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj client.Object, respChan chan *ReconcileResponce) error {
+func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj client.Object) *ReconcileResponce {
 	var (
 		err       error
 		res       reconcile.Result
@@ -89,12 +89,12 @@ func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj 
 
 	kindWatcherData, err := r.getKindStruct(kindName)
 	if err != nil {
-		return err
+		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
 
 	nName, err := utils.GetRuntimeObjectNamespacedName(obj)
 	if err != nil {
-		return err
+		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
 
 	r.Lock()
@@ -128,17 +128,15 @@ func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj 
 
 	res, err = kindWatcherData.reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nName})
 	endTime = time.Now()
-	if respChan != nil {
-		respChan <- &ReconcileResponce{
-			Result:          res,
-			Err:             err,
-			StartFinishTime: k8t.TimeInterval{startTime, endTime},
-		}
-		close(respChan)
+	return &ReconcileResponce{
+		Result:          res,
+		Err:             err,
+		StartFinishTime: k8t.TimeInterval{startTime, endTime},
 	}
-	return err
 }
 
+// Watch C/R/M/D events from fakeClient or user request.
+// run one instance per Kind type
 func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, kind string) {
 	defer r.watchersWG.Done()
 	r.Lock()
@@ -154,10 +152,10 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 		select {
 		case <-ctx.Done():
 			watcher.Stop()
-			klog.Infof("RCL: %s finished", kind)
+			klog.Infof("RCL: Watcher for %s finished", kind)
 			return
 		case req := <-taskChan:
-			klog.Infof("RCL: Ask to reconcile: %s '%s'", kind, req.Key)
+			klog.Infof("RCL: %s '%s' Req to reconcile", kind, req.Key)
 			nName := utils.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
 			r.Lock()
@@ -168,8 +166,16 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 				break
 			}
 
-			if err := r.doReconcile(ctx, kind, obj, req.RespChan); err != nil {
-				klog.Errorf("RCL error: %s", err)
+			rv := r.doReconcile(ctx, kind, obj)
+			if req.RespChan != nil {
+				req.RespChan <- rv
+				close(req.RespChan)
+			}
+			rvString := fmt.Sprintf("RCL: %s '%s' Reconcile result: %s", kind, req.Key, rv)
+			if rv.Err != nil {
+				klog.Errorf(rvString)
+			} else {
+				klog.Infof(rvString)
 			}
 		case in := <-watcher.ResultChan():
 			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
@@ -182,7 +188,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 			}
 			tmp := strings.Split(reflect.TypeOf(in.Object).String(), ".")
 			objType := tmp[len(tmp)-1]
-			klog.Infof("RCL: income event: %s [%s] '%s'", in.Type, objType, nName)
+			klog.Infof("RCL: event %s  %s '%s'", in.Type, objType, nName)
 			switch in.Type {
 			case watch.Deleted:
 				if len(k8sObj.GetFinalizers()) == 0 {
@@ -207,7 +213,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 					}
 				}
 			case watch.Added, watch.Modified:
-				if err := r.doReconcile(ctx, kind, k8sObj, nil); err != nil {
+				if _, err := r.Reconcile(kind, nName.String()); err != nil {
 					klog.Errorf("RCL error: %s", err)
 				}
 			}
@@ -273,6 +279,10 @@ func NewFakeReconciller(fakeClient client.WithWatch, scheme *runtime.Scheme) Fak
 		client: fakeClient,
 	}
 	return rv
+}
+
+func (r *ReconcileResponce) String() string {
+	return fmt.Sprintf("{Err:%v  Requeue:%v/%v  Took:%v}", r.Err, r.Result.Requeue, r.Result.RequeueAfter, r.StartFinishTime[1].Sub(r.StartFinishTime[0]))
 }
 
 func ensureUID(ctx context.Context, cl client.WithWatch, obj client.Object) {

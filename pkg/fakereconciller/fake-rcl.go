@@ -45,6 +45,7 @@ type reconcileStatus struct {
 }
 
 type kindWatcherData struct {
+	sync.Mutex
 	gvk            *schema.GroupVersionKind
 	kind           string
 	askToReconcile chan *reconcileRequest
@@ -140,11 +141,10 @@ func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj 
 func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, kind string) {
 	defer r.watchersWG.Done()
 	r.Lock()
-	taskChan := r.kinds[kind].askToReconcile
-	rcl := r.kinds[kind].reconciler
+	kindWD := r.kinds[kind]
 	r.Unlock()
 
-	if rcl == nil {
+	if kindWD.reconciler == nil {
 		panic(fmt.Sprintf("Native reconciller for %s undefined.", kind))
 	}
 
@@ -154,15 +154,15 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 			watcher.Stop()
 			klog.Infof("RCL: Watcher for %s finished", kind)
 			return
-		case req := <-taskChan:
+		case req := <-kindWD.askToReconcile:
+			kindWD.Lock()
 			klog.Infof("RCL: %s '%s' Req to reconcile", kind, req.Key)
 			nName := utils.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
-			r.Lock()
-			obj.SetGroupVersionKind(*r.kinds[kind].gvk)
-			r.Unlock()
+			obj.SetGroupVersionKind(*kindWD.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
 				klog.Errorf("RCL error: %s", err)
+				kindWD.Unlock()
 				break
 			}
 
@@ -177,6 +177,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 			} else {
 				klog.Infof(rvString)
 			}
+			kindWD.Unlock()
 		case in := <-watcher.ResultChan():
 			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {

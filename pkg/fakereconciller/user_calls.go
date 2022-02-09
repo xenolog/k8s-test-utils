@@ -151,3 +151,18 @@ func (r *fakeReconciller) Reconcile(kind, key string) (chan *ReconcileResponce, 
 	}
 	return respChan, err
 }
+
+// Lock -- lock watchers/reconcillers for the specifyed Kind type.
+// returns callable to Unock thread
+func (r *fakeReconciller) LockReconciller(kind string) func() {
+	watcherRec, err := r.getKindStruct(kind)
+	if err != nil {
+		return func() {
+			klog.Warningf("UnockReconciller: %s", err)
+		}
+	}
+	watcherRec.Lock()
+	return func() {
+		watcherRec.Unlock()
+	}
+}

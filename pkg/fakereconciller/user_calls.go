@@ -157,12 +157,15 @@ func (r *fakeReconciller) Reconcile(kind, key string) (chan *ReconcileResponce, 
 func (r *fakeReconciller) LockReconciller(kind string) func() {
 	watcherRec, err := r.getKindStruct(kind)
 	if err != nil {
+		klog.Warningf("RCL-LOOP: try to lock unsupported Kind '%s': %s", kind, err)
 		return func() {
-			klog.Warningf("UnockReconciller: %s", err)
+			klog.Warningf("RCL-LOOP: try to unlock unsupported Kind '%s': %s", kind, err)
 		}
 	}
 	watcherRec.Lock()
+	klog.Warningf("RCL-LOOP: '%s' locked", kind)
 	return func() {
+		klog.Warningf("RCL-LOOP: '%s' unlocked", kind)
 		watcherRec.Unlock()
 	}
 }

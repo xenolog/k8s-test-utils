@@ -32,6 +32,10 @@ type FakeReconciller interface {
 	// Returns chan which can be used to obtain reconcile response and timings
 	Reconcile(kindName, key string) (chan *ReconcileResponce, error)
 
+	// LockReconciller -- lock watchers/reconcillers for the specifyed Kind type.
+	// returns callable to Unock thread
+	LockReconciller(kindName string) func()
+
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
 	// If isReconcilled if false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.

@@ -47,7 +47,7 @@ type kindWatcherData struct {
 	gvk            *schema.GroupVersionKind
 	kind           string
 	askToReconcile chan *reconcileRequest
-	reconciler     NativeReconciller
+	reconciler     reconcile.Reconciler
 	processedObjs  map[string]*reconcileStatus
 }
 
@@ -262,7 +262,7 @@ func (r *fakeReconciller) Wait() {
 	r.watchersWG.Wait()
 }
 
-func (r *fakeReconciller) AddController(gvk *schema.GroupVersionKind, rcl NativeReconciller) error {
+func (r *fakeReconciller) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
 	kind := gvk.Kind
 	if k, ok := r.kinds[kind]; ok {
 		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String()) //nolint

@@ -63,7 +63,7 @@ type FakeReconciller interface {
 	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error)
 
 	// AddController -- add reconciller to the monitor loop
-	AddController(gvk *schema.GroupVersionKind, rcl NativeReconciller) error
+	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error
 
 	GetClient() client.WithWatch
 	GetScheme() *runtime.Scheme
@@ -74,10 +74,3 @@ type ReconcileResponce struct {
 	Result          reconcile.Result
 	StartFinishTime k8t.TimeInterval
 }
-
-// NativeReconciller -- any k8s operator reconcilable type
-type NativeReconciller interface {
-	Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error)
-}
-
-// ----------------------------------------------------------------------------

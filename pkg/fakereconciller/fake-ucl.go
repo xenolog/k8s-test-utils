@@ -66,8 +66,7 @@ func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key
 func (r *fakeReconciller) WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error {
 	respCh, err := r.WatchToBeReconciled(ctx, kindName, key, reconciledAfter)
 	if err == nil {
-		_, ok := <-respCh
-		if !ok {
+		if _, ok := <-respCh; !ok {
 			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
 		}
 	}
@@ -131,8 +130,7 @@ func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string
 func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) error {
 	respCh, err := r.WatchToBeCreated(ctx, kind, key, isReconcilled)
 	if err == nil {
-		_, ok := <-respCh
-		if !ok {
+		if _, ok := <-respCh; !ok {
 			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
 		}
 	}
@@ -215,6 +213,74 @@ func (r *fakeReconciller) WaitToFieldSatisfyRE(ctx context.Context, kind, key, f
 		}
 	}
 	return rv, err
+}
+func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
+	if ctx == nil {
+		ctx = r.mainloopContext
+	}
+	rr, err := r.getKindStruct(kind)
+	if err != nil {
+		return nil, err
+	}
+	respChan := make(chan error, ControlChanBuffSize)
+	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked [%s] '%s'", kind, key)
+	nName := utils.KeyToNamespacedName(key)
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(*rr.gvk)
+	pathSlice := strings.Split(fieldpath, ".")
+
+	r.userTasksWG.Add(1)
+	go func() {
+		defer r.userTasksWG.Done()
+		defer close(respChan)
+		for {
+			err := r.client.Get(ctx, nName, obj)
+			switch {
+			case err != nil && !apimErrors.IsNotFound(err):
+				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
+			case apimErrors.IsNotFound(err):
+				klog.Warningf("%s: obj [%s] '%s' not found, waiting to create", logKey, kind, key)
+			case err == nil:
+				res, ok, err := unstructured.NestedFieldCopy(obj.Object, pathSlice...)
+				switch {
+				case err != nil:
+					respChan <- err
+					return
+				case ok && callback(res):
+					respChan <- nil
+					return
+				case ok:
+					klog.Warningf("%s: field '%s' is not satisfy given callback function, waiting next reconcile", logKey, fieldpath)
+				default:
+					klog.Warningf("%s: field '%s' is not found, waiting next reconcile", logKey, fieldpath)
+				}
+			}
+			select {
+			case <-r.mainloopContext.Done():
+				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
+				respChan <- errStoppedFromTheOutside
+				return
+			case <-ctx.Done():
+				klog.Warningf("%s: %s", logKey, ctx.Err())
+				respChan <- errStoppedFromTheOutside
+				return
+			case <-time.After(PauseTime):
+				continue
+			}
+		}
+	}()
+
+	return respChan, err
+}
+
+func (r *fakeReconciller) WaitToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) error {
+	respCh, err := r.WatchToFieldBeChecked(ctx, kind, key, fieldpath, callback)
+	if err == nil {
+		if _, ok := <-respCh; !ok {
+			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
+		}
+	}
+	return err
 }
 
 // Reconcile -- invoke to reconcile the corresponded resource

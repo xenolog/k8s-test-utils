@@ -14,7 +14,7 @@ import (
 type FakeReconciller interface {
 
 	// Run main loop to watch create/delete/reconcile requests.
-	// Context will be stored to use as fallback
+	// Context will be stored to future use
 	Run(ctx context.Context)
 
 	// todo(sv): will be better to implement in the future
@@ -37,33 +37,52 @@ type FakeReconciller interface {
 	LockReconciller(kindName string) func()
 
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
-	// If isReconcilled if false just reconciliation record (fact) will be probed,
+	// If isReconcilled is false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.
-	// If ctx == nil -- context, stored in the Run(...) will be used
+	// Pass nil instead context, to use stored early
 	WaitToBeCreated(ctx context.Context, kindName, key string, isReconcilled bool) error
 
 	// WatchToBeCreated -- run gorutine to wait while corresponded CRD will be created.
-	// If isReconcilled if false just reconciliation record (fact) will be probed,
+	// If isReconcilled is false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.
 	// Does not block current gorutine,  error chan returned to obtain result if need
-	// If ctx == nil -- context, stored in the Run(...) will be used
+	// Pass nil instead context, to use stored early
 	WatchToBeCreated(ctx context.Context, kindName, key string, isReconcilled bool) (chan error, error)
 
 	// WaitToBeReconciled -- block gorutine while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
-	// If ctx == nil -- context, stored in the Run(...) will be used
+	// Pass nil instead context, to use stored early
 	WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error
 
 	// WatchToBeReconciled -- run gorutine to wait while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
 	// Does not block current gorutine,  error chan returned to obtain result if need
-	// If ctx == nil -- context, stored in the Run(...) will be used
+	// Pass nil instead context, to use stored early
 	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error)
 
-	// AddController -- add reconciller to the monitor loop
-	AddController(gvk *schema.GroupVersionKind, rcl NativeReconciller) error
+	// WaitToFieldSatisfyRE -- block gorutine while corresponded CRD field will be satisfy to the given regexp.
+	// The dot '.' is a separator in the fieldPath
+	// Pass nil instead context, to use stored early
+	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (string, error)
+
+	// WatchToFieldSatisfyRE -- run gorutine to wait while corresponded CRD field will be satisfy to the given regexp.
+	// Pass nil instead context, to use stored early
+	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan string, error)
+
+	// WaitToFieldBeChecked -- block gorutine while corresponded CRD field will be exists and checked by callback function.
+	// The dot '.' is a separator in the fieldPath
+	// Pass nil instead context, to use stored early
+	WaitToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(interface{}) bool) error
+
+	// WatchToFieldBeChecked -- run gorutine to wait while corresponded CRD field will be exists and checked by callback function.
+	// Pass nil instead context, to use stored early
+	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(interface{}) bool) (chan error, error)
+
+	// AddController -- add reconciller to the monitor loop while setup (before .Run(...) call)
+	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error
+	AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error
 
 	GetClient() client.WithWatch
 	GetScheme() *runtime.Scheme
@@ -74,10 +93,3 @@ type ReconcileResponce struct {
 	Result          reconcile.Result
 	StartFinishTime k8t.TimeInterval
 }
-
-// NativeReconciller -- any k8s operator reconcilable type
-type NativeReconciller interface {
-	Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error)
-}
-
-// ----------------------------------------------------------------------------

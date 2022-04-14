@@ -62,6 +62,15 @@ type FakeReconciller interface {
 	// Pass nil instead context, to use stored early
 	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error)
 
+	// WaitToFieldSatisfyRE -- block gorutine while corresponded CRD field will be satisfy to the given regexp.
+	// The dot '.' is a separator in the fieldPath
+	// Pass nil instead context, to use stored early
+	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (string, error)
+
+	// WatchToFieldSatisfyRE -- run gorutine to wait while corresponded CRD field will be satisfy to the given regexp.
+	// Pass nil instead context, to use stored early
+	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan string, error)
+
 	// AddController -- add reconciller to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error
 	AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error

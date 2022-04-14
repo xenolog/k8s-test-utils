@@ -3,6 +3,8 @@ package fakereconciller
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
@@ -135,6 +137,84 @@ func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string,
 		}
 	}
 	return err
+}
+
+func (r *fakeReconciller) WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (chan string, error) {
+	if ctx == nil {
+		ctx = r.mainloopContext
+	}
+	rr, err := r.getKindStruct(kind)
+	if err != nil {
+		return nil, err
+	}
+	re, err := regexp.Compile(reString)
+	if err != nil {
+		return nil, err
+	}
+	respChan := make(chan string, ControlChanBuffSize)
+	// logKey := fmt.Sprintf("RCL: WatchingToFieldSatisfyRE [%s] '%s' %s~%s", kind, key,fieldpath, reString)
+	logKey := fmt.Sprintf("RCL: WaitingToFieldSatisfyRE [%s] '%s'", kind, key)
+	nName := utils.KeyToNamespacedName(key)
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(*rr.gvk)
+	pathSlice := strings.Split(fieldpath, ".")
+
+	r.userTasksWG.Add(1)
+	go func() {
+		defer r.userTasksWG.Done()
+		defer close(respChan)
+		for {
+			err := r.client.Get(ctx, nName, obj)
+			switch {
+			case err != nil && !apimErrors.IsNotFound(err):
+				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
+			case apimErrors.IsNotFound(err):
+				klog.Warningf("%s: obj [%s] '%s' not found, waiting to create", logKey, kind, key)
+			case err == nil:
+				res, ok, err := unstructured.NestedString(obj.Object, pathSlice...)
+				switch {
+				case err != nil:
+					respChan <- fmt.Sprintf("fakeRclERR: %s", err)
+					return
+				case ok && re.MatchString(res):
+					respChan <- res
+					return
+				case ok:
+					klog.Warningf("%s: field '%s' is not satisfy /%s/, waiting next reconcile", logKey, fieldpath, reString)
+				default:
+					klog.Warningf("%s: field '%s' is not found, waiting next reconcile", logKey, fieldpath)
+				}
+			}
+			select {
+			case <-r.mainloopContext.Done():
+				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
+				respChan <- fmt.Sprintf("fakeRclERR: %s", errStoppedFromTheOutside)
+				return
+			case <-ctx.Done():
+				klog.Warningf("%s: %s", logKey, ctx.Err())
+				respChan <- fmt.Sprintf("fakeRclERR: %s", errStoppedFromTheOutside)
+				return
+			case <-time.After(PauseTime):
+				continue
+			}
+		}
+	}()
+
+	return respChan, err
+}
+
+func (r *fakeReconciller) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (string, error) {
+	var (
+		rv string
+		ok bool
+	)
+	respCh, err := r.WatchToFieldSatisfyRE(ctx, kind, key, fieldpath, reString)
+	if err == nil {
+		if rv, ok = <-respCh; !ok {
+			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
+		}
+	}
+	return rv, err
 }
 
 // Reconcile -- invoke to reconcile the corresponded resource

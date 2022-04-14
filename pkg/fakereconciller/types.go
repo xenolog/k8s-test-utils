@@ -64,6 +64,7 @@ type FakeReconciller interface {
 
 	// AddController -- add reconciller to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error
+	AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error
 
 	GetClient() client.WithWatch
 	GetScheme() *runtime.Scheme

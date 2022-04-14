@@ -262,6 +262,11 @@ func (r *fakeReconciller) Wait() {
 	r.watchersWG.Wait()
 }
 
+func (r *fakeReconciller) AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error {
+	gvk := m.GroupVersionKind()
+	return r.AddController(&gvk, rcl)
+}
+
 func (r *fakeReconciller) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
 	kind := gvk.Kind
 	if k, ok := r.kinds[kind]; ok {

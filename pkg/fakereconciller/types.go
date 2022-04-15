@@ -65,11 +65,11 @@ type FakeReconciller interface {
 	// WaitToFieldSatisfyRE -- block gorutine while corresponded CRD field will be satisfy to the given regexp.
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use stored early
-	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (string, error)
+	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) error
 
 	// WatchToFieldSatisfyRE -- run gorutine to wait while corresponded CRD field will be satisfy to the given regexp.
 	// Pass nil instead context, to use stored early
-	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan string, error)
+	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan error, error)
 
 	// WaitToFieldBeChecked -- block gorutine while corresponded CRD field will be exists and checked by callback function.
 	// The dot '.' is a separator in the fieldPath

@@ -43,7 +43,7 @@ func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key
 					respChan <- nil
 					return
 				}
-				klog.Warningf("%s: reconciled earlier, than '%s' , waiting to fresh reconcile", logKey, reconciledAfter)
+				klog.Warningf("%s: reconciled earlier, than '%s', continue waiting...", logKey, reconciledAfter)
 			}
 			select {
 			case <-r.mainloopContext.Done():
@@ -73,58 +73,20 @@ func (r *fakeReconciller) WaitToBeReconciled(ctx context.Context, kindName, key 
 	return err
 }
 
+//-----------------------------------------------------------------------------
+
 func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) (chan error, error) {
-	if ctx == nil {
-		ctx = r.mainloopContext
-	}
-	rr, err := r.getKindStruct(kind)
-	if err != nil {
-		return nil, err
-	}
-	respChan := make(chan error, ControlChanBuffSize)
 	logKey := fmt.Sprintf("RCL: WaitingToCreate [%s] '%s'", kind, key)
-	nName := utils.KeyToNamespacedName(key)
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(*rr.gvk)
-
-	r.userTasksWG.Add(1)
-	go func() {
-		defer r.userTasksWG.Done()
-		defer close(respChan)
-		for {
-			err := r.client.Get(ctx, nName, obj)
-			switch {
-			case err != nil && !apimErrors.IsNotFound(err):
-				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
-			case err == nil:
-				if !isReconcilled {
-					// status exists is not valuable
-					respChan <- nil
-					return
-				}
-				if _, ok, _ := unstructured.NestedMap(obj.Object, "status"); ok {
-					// status exist
-					respChan <- nil
-					return
-				}
-				klog.Warningf("%s: object exists, but status not found, waiting to reconcile", logKey)
-			}
-			select {
-			case <-r.mainloopContext.Done():
-				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
-				respChan <- errStoppedFromTheOutside
-				return
-			case <-ctx.Done():
-				klog.Warningf("%s: %s", logKey, ctx.Err())
-				respChan <- ctx.Err()
-				return
-			case <-time.After(PauseTime):
-				continue
-			}
+	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in interface{}) bool {
+		if !isReconcilled {
+			return true
 		}
-	}()
-
-	return respChan, err
+		_, ok := in.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		return true
+	})
 }
 
 func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) error {
@@ -137,84 +99,33 @@ func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string,
 	return err
 }
 
-func (r *fakeReconciller) WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (chan string, error) {
-	if ctx == nil {
-		ctx = r.mainloopContext
-	}
-	rr, err := r.getKindStruct(kind)
-	if err != nil {
-		return nil, err
-	}
-	re, err := regexp.Compile(reString)
-	if err != nil {
-		return nil, err
-	}
-	respChan := make(chan string, ControlChanBuffSize)
-	// logKey := fmt.Sprintf("RCL: WatchingToFieldSatisfyRE [%s] '%s' %s~%s", kind, key,fieldpath, reString)
+//-----------------------------------------------------------------------------
+
+func (r *fakeReconciller) WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (chan error, error) {
 	logKey := fmt.Sprintf("RCL: WaitingToFieldSatisfyRE [%s] '%s'", kind, key)
-	nName := utils.KeyToNamespacedName(key)
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(*rr.gvk)
-	pathSlice := strings.Split(fieldpath, ".")
-
-	r.userTasksWG.Add(1)
-	go func() {
-		defer r.userTasksWG.Done()
-		defer close(respChan)
-		for {
-			err := r.client.Get(ctx, nName, obj)
-			switch {
-			case err != nil && !apimErrors.IsNotFound(err):
-				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
-			case apimErrors.IsNotFound(err):
-				klog.Warningf("%s: obj [%s] '%s' not found, waiting to create", logKey, kind, key)
-			case err == nil:
-				res, ok, err := unstructured.NestedString(obj.Object, pathSlice...)
-				switch {
-				case err != nil:
-					respChan <- fmt.Sprintf("fakeRclERR: %s", err)
-					return
-				case ok && re.MatchString(res):
-					respChan <- res
-					return
-				case ok:
-					klog.Warningf("%s: field '%s' is not satisfy /%s/, waiting next reconcile", logKey, fieldpath, reString)
-				default:
-					klog.Warningf("%s: field '%s' is not found, waiting next reconcile", logKey, fieldpath)
-				}
-			}
-			select {
-			case <-r.mainloopContext.Done():
-				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
-				respChan <- fmt.Sprintf("fakeRclERR: %s", errStoppedFromTheOutside)
-				return
-			case <-ctx.Done():
-				klog.Warningf("%s: %s", logKey, ctx.Err())
-				respChan <- fmt.Sprintf("fakeRclERR: %s", errStoppedFromTheOutside)
-				return
-			case <-time.After(PauseTime):
-				continue
-			}
+	re := regexp.MustCompile(reString)
+	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, func(in interface{}) bool {
+		str, ok := in.(string)
+		if !ok {
+			return false
 		}
-	}()
-
-	return respChan, err
+		return re.MatchString(str)
+	})
 }
 
-func (r *fakeReconciller) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (string, error) {
-	var (
-		rv string
-		ok bool
-	)
+func (r *fakeReconciller) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) error {
 	respCh, err := r.WatchToFieldSatisfyRE(ctx, kind, key, fieldpath, reString)
 	if err == nil {
-		if rv, ok = <-respCh; !ok {
+		if _, ok := <-respCh; !ok {
 			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
 		}
 	}
-	return rv, err
+	return err
 }
-func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
+
+//-----------------------------------------------------------------------------
+
+func (r *fakeReconciller) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
 	if ctx == nil {
 		ctx = r.mainloopContext
 	}
@@ -223,7 +134,6 @@ func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, 
 		return nil, err
 	}
 	respChan := make(chan error, ControlChanBuffSize)
-	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked [%s] '%s'", kind, key)
 	nName := utils.KeyToNamespacedName(key)
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(*rr.gvk)
@@ -239,7 +149,7 @@ func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, 
 			case err != nil && !apimErrors.IsNotFound(err):
 				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
 			case apimErrors.IsNotFound(err):
-				klog.Warningf("%s: obj [%s] '%s' not found, waiting to create", logKey, kind, key)
+				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to create...", logKey, kind, key)
 			case err == nil:
 				res, ok, err := unstructured.NestedFieldCopy(obj.Object, pathSlice...)
 				switch {
@@ -250,9 +160,9 @@ func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, 
 					respChan <- nil
 					return
 				case ok:
-					klog.Warningf("%s: field '%s' is not satisfy given callback function, waiting next reconcile", logKey, fieldpath)
+					klog.Warningf("%s: field '%s' is not satisfy to given conditions, continue waiting...", logKey, fieldpath)
 				default:
-					klog.Warningf("%s: field '%s' is not found, waiting next reconcile", logKey, fieldpath)
+					klog.Warningf("%s: field '%s' is not found, continue waiting...", logKey, fieldpath)
 				}
 			}
 			select {
@@ -271,6 +181,11 @@ func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, 
 	}()
 
 	return respChan, err
+}
+
+func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
+	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked [%s] '%s'", kind, key)
+	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, callback)
 }
 
 func (r *fakeReconciller) WaitToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) error {
@@ -283,6 +198,7 @@ func (r *fakeReconciller) WaitToFieldBeChecked(ctx context.Context, kind, key, f
 	return err
 }
 
+//-----------------------------------------------------------------------------
 // Reconcile -- invoke to reconcile the corresponded resource
 // returns chan which can be used to obtain reconcile responcce and timings
 func (r *fakeReconciller) Reconcile(kind, key string) (chan *ReconcileResponce, error) {

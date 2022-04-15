@@ -1,4 +1,4 @@
-package fakereconciller
+package fakereconciler
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type FakeReconciller interface {
+type FakeReconciler interface {
 
 	// Run main loop to watch create/delete/reconcile requests.
 	// Context will be stored to future use
 	Run(ctx context.Context)
 
 	// todo(sv): will be better to implement in the future
-	// RunAndDeferWaitToFinish -- run fakeReconciller loop and defer
+	// RunAndDeferWaitToFinish -- run fakeReconciler loop and defer
 	// Wait(...) function with infinity time to wait.
 	// may be used as `defer rcl.RunAndDeferWaitToFinish(ctx)()` call
 	// RunAndDeferWaitToFinish(context.Context) func()
@@ -32,22 +32,22 @@ type FakeReconciller interface {
 	// Returns chan which can be used to obtain reconcile response and timings
 	Reconcile(kindName, key string) (chan *ReconcileResponce, error)
 
-	// LockReconciller -- lock watchers/reconcillers for the specifyed Kind type.
+	// LockReconciler -- lock watchers/reconcilers for the specifyed Kind type.
 	// returns callable to Unock thread
-	LockReconciller(kindName string) func()
+	LockReconciler(kindName string) func()
 
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
-	// If isReconcilled is false just reconciliation record (fact) will be probed,
+	// If isReconciled is false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.
 	// Pass nil instead context, to use stored early
-	WaitToBeCreated(ctx context.Context, kindName, key string, isReconcilled bool) error
+	WaitToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) error
 
 	// WatchToBeCreated -- run gorutine to wait while corresponded CRD will be created.
-	// If isReconcilled is false just reconciliation record (fact) will be probed,
+	// If isReconciled is false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconcilated result (status exists) will be waited.
 	// Does not block current gorutine,  error chan returned to obtain result if need
 	// Pass nil instead context, to use stored early
-	WatchToBeCreated(ctx context.Context, kindName, key string, isReconcilled bool) (chan error, error)
+	WatchToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) (chan error, error)
 
 	// WaitToBeReconciled -- block gorutine while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
@@ -80,7 +80,7 @@ type FakeReconciller interface {
 	// Pass nil instead context, to use stored early
 	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(interface{}) bool) (chan error, error)
 
-	// AddController -- add reconciller to the monitor loop while setup (before .Run(...) call)
+	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error
 	AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error
 

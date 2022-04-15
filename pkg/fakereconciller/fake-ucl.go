@@ -76,57 +76,17 @@ func (r *fakeReconciller) WaitToBeReconciled(ctx context.Context, kindName, key 
 //-----------------------------------------------------------------------------
 
 func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) (chan error, error) {
-	if ctx == nil {
-		ctx = r.mainloopContext
-	}
-	rr, err := r.getKindStruct(kind)
-	if err != nil {
-		return nil, err
-	}
-	respChan := make(chan error, ControlChanBuffSize)
 	logKey := fmt.Sprintf("RCL: WaitingToCreate [%s] '%s'", kind, key)
-	nName := utils.KeyToNamespacedName(key)
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(*rr.gvk)
-
-	r.userTasksWG.Add(1)
-	go func() {
-		defer r.userTasksWG.Done()
-		defer close(respChan)
-		for {
-			err := r.client.Get(ctx, nName, obj)
-			switch {
-			case err != nil && !apimErrors.IsNotFound(err):
-				klog.Warningf("%s: Error while fetching the obj: %s", logKey, err)
-			case err == nil:
-				if !isReconcilled {
-					// status exists is not valuable
-					respChan <- nil
-					return
-				}
-				if _, ok, _ := unstructured.NestedMap(obj.Object, "status"); ok {
-					// status exist
-					respChan <- nil
-					return
-				}
-				klog.Warningf("%s: object exists, but status not found, continue waiting...", logKey)
-			}
-			select {
-			case <-r.mainloopContext.Done():
-				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
-				respChan <- errStoppedFromTheOutside
-				return
-			case <-ctx.Done():
-				klog.Warningf("%s: %s", logKey, ctx.Err())
-				respChan <- ctx.Err()
-				return
-			case <-time.After(PauseTime):
-				continue
-			}
+	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in interface{}) bool {
+		if !isReconcilled {
+			return true
 		}
-	}()
-
-	return respChan, err
+		_, ok := in.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		return true
+	})
 }
 
 func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) error {

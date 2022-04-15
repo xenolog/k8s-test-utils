@@ -1,4 +1,4 @@
-package fakereconciller
+package fakereconciler
 
 import (
 	"context"
@@ -51,7 +51,7 @@ type kindWatcherData struct {
 	processedObjs  map[string]*reconcileStatus
 }
 
-type fakeReconciller struct {
+type fakeReconciler struct {
 	sync.Mutex
 	scheme          *runtime.Scheme
 	kinds           map[string]*kindWatcherData
@@ -61,14 +61,14 @@ type fakeReconciller struct {
 	userTasksWG     sync.WaitGroup
 }
 
-func (r *fakeReconciller) GetClient() client.WithWatch {
+func (r *fakeReconciler) GetClient() client.WithWatch {
 	return r.client
 }
-func (r *fakeReconciller) GetScheme() *runtime.Scheme {
+func (r *fakeReconciler) GetScheme() *runtime.Scheme {
 	return r.scheme
 }
 
-func (r *fakeReconciller) getKindStruct(kind string) (*kindWatcherData, error) {
+func (r *fakeReconciler) getKindStruct(kind string) (*kindWatcherData, error) {
 	r.Lock()
 	defer r.Unlock()
 	rv, ok := r.kinds[kind]
@@ -78,7 +78,7 @@ func (r *fakeReconciller) getKindStruct(kind string) (*kindWatcherData, error) {
 	return rv, nil
 }
 
-func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj client.Object) *ReconcileResponce {
+func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj client.Object) *ReconcileResponce {
 	var (
 		err       error
 		res       reconcile.Result
@@ -136,14 +136,14 @@ func (r *fakeReconciller) doReconcile(ctx context.Context, kindName string, obj 
 
 // Watch C/R/M/D events from fakeClient or user request.
 // run one instance per Kind type
-func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, kind string) {
+func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, kind string) {
 	defer r.watchersWG.Done()
 	r.Lock()
 	kindWD := r.kinds[kind]
 	r.Unlock()
 
 	if kindWD.reconciler == nil {
-		panic(fmt.Sprintf("Native reconciller for %s undefined.", kind))
+		panic(fmt.Sprintf("Native reconciler for %s undefined.", kind))
 	}
 
 	for {
@@ -218,7 +218,7 @@ func (r *fakeReconciller) doWatch(ctx context.Context, watcher watch.Interface, 
 	}
 }
 
-func (r *fakeReconciller) Run(ctx context.Context) {
+func (r *fakeReconciler) Run(ctx context.Context) {
 	var deadlineMsg string
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -245,10 +245,10 @@ func (r *fakeReconciller) Run(ctx context.Context) {
 }
 
 // todo(sv): will be better to implement in the future
-// RunAndDeferWaitToFinish -- run fakeReconciller loop and defer
+// RunAndDeferWaitToFinish -- run fakeReconciler loop and defer
 // Wait(...) function with infinity time to wait.
 // may be used as `defer rcl.RunAndDeferWaitToFinish(ctx)()` call
-// func (r *fakeReconciller) RunAndDeferWaitToFinish(ctx context.Context) func() {
+// func (r *fakeReconciler) RunAndDeferWaitToFinish(ctx context.Context) func() {
 // 	r.Run(ctx)
 // 	klog.Warningf("RCL: deffered waiting of finishing loops is not implementing now.")
 // 	return func() {}
@@ -257,17 +257,17 @@ func (r *fakeReconciller) Run(ctx context.Context) {
 // Wait -- wait to finish all running fake reconcile loops
 // and user requested create/reconcile calls. Like sync.Wait()
 // context, passed to Run(...) will be used to cancel all waiters.
-func (r *fakeReconciller) Wait() {
+func (r *fakeReconciler) Wait() {
 	r.userTasksWG.Wait() // should be before watchersWG.Wait() !!!
 	r.watchersWG.Wait()
 }
 
-func (r *fakeReconciller) AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error {
+func (r *fakeReconciler) AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error {
 	gvk := m.GroupVersionKind()
 	return r.AddController(&gvk, rcl)
 }
 
-func (r *fakeReconciller) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
+func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
 	kind := gvk.Kind
 	if k, ok := r.kinds[kind]; ok {
 		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String()) //nolint
@@ -283,8 +283,8 @@ func (r *fakeReconciller) AddController(gvk *schema.GroupVersionKind, rcl reconc
 	return nil
 }
 
-func NewFakeReconciller(fakeClient client.WithWatch, scheme *runtime.Scheme) FakeReconciller {
-	rv := &fakeReconciller{
+func NewFakeReconciler(fakeClient client.WithWatch, scheme *runtime.Scheme) FakeReconciler {
+	rv := &fakeReconciler{
 		kinds:  map[string]*kindWatcherData{},
 		scheme: scheme,
 		client: fakeClient,

@@ -1,4 +1,4 @@
-package fakereconciller
+package fakereconciler
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"k8s.io/klog"
 )
 
-func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
+func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
 	if ctx == nil {
 		ctx = r.mainloopContext
 	}
@@ -63,7 +63,7 @@ func (r *fakeReconciller) WatchToBeReconciled(ctx context.Context, kindName, key
 	return respChan, nil
 }
 
-func (r *fakeReconciller) WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error {
+func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error {
 	respCh, err := r.WatchToBeReconciled(ctx, kindName, key, reconciledAfter)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
@@ -75,10 +75,10 @@ func (r *fakeReconciller) WaitToBeReconciled(ctx context.Context, kindName, key 
 
 //-----------------------------------------------------------------------------
 
-func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) (chan error, error) {
+func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) {
 	logKey := fmt.Sprintf("RCL: WaitingToCreate [%s] '%s'", kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in interface{}) bool {
-		if !isReconcilled {
+		if !isReconciled {
 			return true
 		}
 		_, ok := in.(map[string]interface{})
@@ -89,8 +89,8 @@ func (r *fakeReconciller) WatchToBeCreated(ctx context.Context, kind, key string
 	})
 }
 
-func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string, isReconcilled bool) error {
-	respCh, err := r.WatchToBeCreated(ctx, kind, key, isReconcilled)
+func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, isReconciled bool) error {
+	respCh, err := r.WatchToBeCreated(ctx, kind, key, isReconciled)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
 			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
@@ -101,7 +101,7 @@ func (r *fakeReconciller) WaitToBeCreated(ctx context.Context, kind, key string,
 
 //-----------------------------------------------------------------------------
 
-func (r *fakeReconciller) WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (chan error, error) {
+func (r *fakeReconciler) WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (chan error, error) {
 	logKey := fmt.Sprintf("RCL: WaitingToFieldSatisfyRE [%s] '%s'", kind, key)
 	re := regexp.MustCompile(reString)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, func(in interface{}) bool {
@@ -113,7 +113,7 @@ func (r *fakeReconciller) WatchToFieldSatisfyRE(ctx context.Context, kind, key, 
 	})
 }
 
-func (r *fakeReconciller) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) error {
+func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) error {
 	respCh, err := r.WatchToFieldSatisfyRE(ctx, kind, key, fieldpath, reString)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
@@ -125,7 +125,7 @@ func (r *fakeReconciller) WaitToFieldSatisfyRE(ctx context.Context, kind, key, f
 
 //-----------------------------------------------------------------------------
 
-func (r *fakeReconciller) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
+func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
 	if ctx == nil {
 		ctx = r.mainloopContext
 	}
@@ -183,12 +183,12 @@ func (r *fakeReconciller) watchToFieldBeChecked(ctx context.Context, logKey, kin
 	return respChan, err
 }
 
-func (r *fakeReconciller) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
+func (r *fakeReconciler) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) (chan error, error) {
 	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked [%s] '%s'", kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, callback)
 }
 
-func (r *fakeReconciller) WaitToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) error {
+func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(interface{}) bool) error {
 	respCh, err := r.WatchToFieldBeChecked(ctx, kind, key, fieldpath, callback)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
@@ -201,7 +201,7 @@ func (r *fakeReconciller) WaitToFieldBeChecked(ctx context.Context, kind, key, f
 //-----------------------------------------------------------------------------
 // Reconcile -- invoke to reconcile the corresponded resource
 // returns chan which can be used to obtain reconcile responcce and timings
-func (r *fakeReconciller) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
+func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
 	var respChan chan *ReconcileResponce
 	rr, err := r.getKindStruct(kind)
 	if err == nil {
@@ -214,9 +214,9 @@ func (r *fakeReconciller) Reconcile(kind, key string) (chan *ReconcileResponce, 
 	return respChan, err
 }
 
-// Lock -- lock watchers/reconcillers for the specifyed Kind type.
+// Lock -- lock watchers/reconcilers for the specifyed Kind type.
 // returns callable to Unock thread
-func (r *fakeReconciller) LockReconciller(kind string) func() {
+func (r *fakeReconciler) LockReconciler(kind string) func() {
 	watcherRec, err := r.getKindStruct(kind)
 	if err != nil {
 		klog.Warningf("RCL-LOOP: try to lock unsupported Kind '%s': %s", kind, err)

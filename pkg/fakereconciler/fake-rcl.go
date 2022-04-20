@@ -308,7 +308,7 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		meta["uid"] = uuid.NewString()
 	}
 	if ts := obj.GetCreationTimestamp(); ts.IsZero() {
-		meta["creationTimestamp"] = time.Now().Add(time.Duration(-1*rand.Intn(3)-1) * time.Second).UTC() //nolint:gosec
+		meta["creationTimestamp"] = time.Now().Truncate(time.Second).UTC() //nolint:gosec
 	}
 	if g := obj.GetGeneration(); g < 1 {
 		meta["generation"] = 1

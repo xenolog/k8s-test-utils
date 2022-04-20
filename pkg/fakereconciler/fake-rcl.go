@@ -2,8 +2,12 @@ package fakereconciler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -104,7 +108,7 @@ func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj c
 	}
 	r.Unlock()
 
-	startTime = time.Now()
+	startTime = time.Now().UTC()
 	objRec.Lock()
 	objRec.nName = nName
 	objRec.log = append(objRec.log, ReconcileResponce{
@@ -123,10 +127,10 @@ func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj c
 		objRec.Unlock()
 	}()
 
-	ensureUID(ctx, r.client, obj)
+	ensureRequiredMetaFields(ctx, r.client, obj)
 
 	res, err = kindWatcherData.reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nName})
-	endTime = time.Now()
+	endTime = time.Now().UTC()
 	return &ReconcileResponce{
 		Result:          res,
 		Err:             err,
@@ -296,15 +300,38 @@ func (r *ReconcileResponce) String() string {
 	return fmt.Sprintf("{Err:%v  Requeue:%v/%v  Took:%v}", r.Err, r.Result.Requeue, r.Result.RequeueAfter, r.StartFinishTime[1].Sub(r.StartFinishTime[0]))
 }
 
-func ensureUID(ctx context.Context, cl client.WithWatch, obj client.Object) {
+func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj client.Object) {
+	meta := map[string]interface{}{}
 	objType := obj.GetObjectKind().GroupVersionKind().Kind
-	uid := obj.GetUID()
-	if uid == "" {
-		patch := []byte(fmt.Sprintf(`{"metadata":{"uid":"%s"}}`, uuid.NewString()))
-		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.StrategicMergePatchType, patch)); err != nil {
-			klog.Errorf("RCL: unable to fix UID on %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
+
+	if uid := obj.GetUID(); uid == "" {
+		meta["uid"] = uuid.NewString()
+	}
+	if ts := obj.GetCreationTimestamp(); ts.IsZero() {
+		meta["creationTimestamp"] = time.Now().Add(time.Duration(-1*rand.Intn(3)-1) * time.Second).UTC() //nolint:gosec
+	}
+	if g := obj.GetGeneration(); g < 1 {
+		meta["generation"] = 1
+	}
+	if g, err := strconv.Atoi(obj.GetResourceVersion()); err != nil || g < 1 {
+		meta["resourceVersion"] = fmt.Sprint(6000 + rand.Intn(100)) //nolint:gosec
+	}
+	if len(meta) > 0 {
+		fields := sort.StringSlice{}
+		for k := range meta {
+			fields = append(fields, k)
+		}
+		fields.Sort()
+		buff, err := json.Marshal(struct {
+			M map[string]interface{} `json:"metadata"`
+		}{M: meta})
+		if err != nil {
+			klog.Errorf("RCL: unable to marshal Meta patch for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
+		}
+		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.StrategicMergePatchType, buff)); err != nil {
+			klog.Errorf("RCL: unable to fix %v Meta fields for %s '%s/%s': %s", fields, objType, obj.GetNamespace(), obj.GetName(), err)
 		} else {
-			klog.Warningf("RCL: absent UID on %s '%s/%s' set to '%s'", objType, obj.GetNamespace(), obj.GetName(), obj.GetUID())
+			klog.Warningf("RCL: FIX Meta fields %v for %s '%s/%s' updated", fields, objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
 }

@@ -82,10 +82,7 @@ func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string,
 			return true
 		}
 		_, ok := in.(map[string]interface{})
-		if !ok {
-			return false
-		}
-		return true
+		return ok
 	})
 }
 

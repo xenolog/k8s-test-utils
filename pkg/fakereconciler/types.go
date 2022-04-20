@@ -38,13 +38,13 @@ type FakeReconciler interface {
 
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
 	// If isReconciled is false just reconciliation record (fact) will be probed,
-	// else (if true) -- reconcilated result (status exists) will be waited.
+	// else (if true) -- reconciled result (status exists) will be waited.
 	// Pass nil instead context, to use stored early
 	WaitToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) error
 
 	// WatchToBeCreated -- run gorutine to wait while corresponded CRD will be created.
 	// If isReconciled is false just reconciliation record (fact) will be probed,
-	// else (if true) -- reconcilated result (status exists) will be waited.
+	// else (if true) -- reconciled result (status exists) will be waited.
 	// Does not block current gorutine,  error chan returned to obtain result if need
 	// Pass nil instead context, to use stored early
 	WatchToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) (chan error, error)

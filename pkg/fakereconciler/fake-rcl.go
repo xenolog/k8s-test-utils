@@ -331,7 +331,7 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.StrategicMergePatchType, buff)); err != nil {
 			klog.Errorf("RCL: unable to fix %v Meta fields for %s '%s/%s': %s", fields, objType, obj.GetNamespace(), obj.GetName(), err)
 		} else {
-			klog.Warningf("RCL: FIX Meta fields %v for %s '%s/%s' updated", fields, objType, obj.GetNamespace(), obj.GetName())
+			klog.Warningf("RCL: fixed Meta fields %v for %s '%s/%s'", fields, objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
 }

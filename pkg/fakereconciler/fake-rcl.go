@@ -60,7 +60,7 @@ type fakeReconciler struct {
 	scheme          *runtime.Scheme
 	kinds           map[string]*kindWatcherData
 	client          client.WithWatch
-	mainloopContext context.Context
+	mainloopContext context.Context //nolint:containedctx
 	watchersWG      sync.WaitGroup
 	userTasksWG     sync.WaitGroup
 }
@@ -217,6 +217,10 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 				if _, err := r.Reconcile(kind, nName.String()); err != nil {
 					klog.Errorf("RCL error: %s", err)
 				}
+			case watch.Bookmark, watch.Error:
+				fallthrough
+			default:
+				klog.Warning("RCL: unsupported event")
 			}
 		}
 	}
@@ -274,7 +278,7 @@ func (r *fakeReconciler) AddControllerByType(m schema.ObjectKind, rcl reconcile.
 func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
 	kind := gvk.Kind
 	if k, ok := r.kinds[kind]; ok {
-		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String()) //nolint
+		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String())
 	}
 
 	r.kinds[kind] = &kindWatcherData{
@@ -308,13 +312,13 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		meta["uid"] = uuid.NewString()
 	}
 	if ts := obj.GetCreationTimestamp(); ts.IsZero() {
-		meta["creationTimestamp"] = time.Now().Truncate(time.Second).UTC() //nolint:gosec
+		meta["creationTimestamp"] = time.Now().Truncate(time.Second).UTC()
 	}
 	if g := obj.GetGeneration(); g < 1 {
 		meta["generation"] = 1
 	}
 	if g, err := strconv.Atoi(obj.GetResourceVersion()); err != nil || g < 1 {
-		meta["resourceVersion"] = fmt.Sprint(6000 + rand.Intn(100)) //nolint:gosec
+		meta["resourceVersion"] = fmt.Sprint(6000 + rand.Intn(100)) //nolint
 	}
 	if len(meta) > 0 {
 		fields := sort.StringSlice{}

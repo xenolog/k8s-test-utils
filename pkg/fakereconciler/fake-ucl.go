@@ -16,7 +16,7 @@ import (
 
 func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
 	if ctx == nil {
-		ctx = r.mainloopContext
+		ctx = r.mainloopContext //nolint:contextcheck
 	}
 	kindWatcherData, err := r.getKindStruct(kindName)
 	if err != nil {
@@ -124,7 +124,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 
 func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
 	if ctx == nil {
-		ctx = r.mainloopContext
+		ctx = r.mainloopContext //nolint:contextcheck
 	}
 	rr, err := r.getKindStruct(kind)
 	if err != nil {

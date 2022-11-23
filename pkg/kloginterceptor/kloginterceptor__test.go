@@ -1,4 +1,4 @@
-package kloginterceptor
+package kloginterceptor //nolint:testpackage
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:dupword
 func TestStringNoDuplicateLines(t *testing.T) {
 	tt := assert.New(t)
 	inBuff := bytes.NewBufferString(`

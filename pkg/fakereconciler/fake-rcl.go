@@ -27,7 +27,7 @@ import (
 
 const (
 	PauseTime           = 127 * time.Millisecond
-	ControlChanBuffSize = 8
+	ControlChanBuffSize = 255
 )
 
 var (
@@ -60,7 +60,7 @@ type fakeReconciler struct {
 	scheme          *runtime.Scheme
 	kinds           map[string]*kindWatcherData
 	client          client.WithWatch
-	mainloopContext context.Context
+	mainloopContext context.Context //nolint:containedctx
 	watchersWG      sync.WaitGroup
 	userTasksWG     sync.WaitGroup
 }
@@ -217,6 +217,10 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 				if _, err := r.Reconcile(kind, nName.String()); err != nil {
 					klog.Errorf("RCL error: %s", err)
 				}
+			case watch.Bookmark, watch.Error:
+				fallthrough
+			default:
+				klog.Warning("RCL: unsupported event")
 			}
 		}
 	}
@@ -274,7 +278,7 @@ func (r *fakeReconciler) AddControllerByType(m schema.ObjectKind, rcl reconcile.
 func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
 	kind := gvk.Kind
 	if k, ok := r.kinds[kind]; ok {
-		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String()) //nolint
+		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String())
 	}
 
 	r.kinds[kind] = &kindWatcherData{
@@ -301,20 +305,20 @@ func (r *ReconcileResponce) String() string {
 }
 
 func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj client.Object) {
-	meta := map[string]interface{}{}
+	meta := map[string]any{}
 	objType := obj.GetObjectKind().GroupVersionKind().Kind
 
 	if uid := obj.GetUID(); uid == "" {
 		meta["uid"] = uuid.NewString()
 	}
 	if ts := obj.GetCreationTimestamp(); ts.IsZero() {
-		meta["creationTimestamp"] = time.Now().Add(time.Duration(-1*rand.Intn(3)-1) * time.Second).UTC() //nolint:gosec
+		meta["creationTimestamp"] = time.Now().Truncate(time.Second).UTC()
 	}
 	if g := obj.GetGeneration(); g < 1 {
 		meta["generation"] = 1
 	}
 	if g, err := strconv.Atoi(obj.GetResourceVersion()); err != nil || g < 1 {
-		meta["resourceVersion"] = fmt.Sprint(6000 + rand.Intn(100)) //nolint:gosec
+		meta["resourceVersion"] = fmt.Sprint(6000 + rand.Intn(100)) //nolint
 	}
 	if len(meta) > 0 {
 		fields := sort.StringSlice{}
@@ -323,7 +327,7 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		}
 		fields.Sort()
 		buff, err := json.Marshal(struct {
-			M map[string]interface{} `json:"metadata"`
+			M map[string]any `json:"metadata"`
 		}{M: meta})
 		if err != nil {
 			klog.Errorf("RCL: unable to marshal Meta patch for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
@@ -331,7 +335,7 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.StrategicMergePatchType, buff)); err != nil {
 			klog.Errorf("RCL: unable to fix %v Meta fields for %s '%s/%s': %s", fields, objType, obj.GetNamespace(), obj.GetName(), err)
 		} else {
-			klog.Warningf("RCL: FIX Meta fields %v for %s '%s/%s' updated", fields, objType, obj.GetNamespace(), obj.GetName())
+			klog.Warningf("RCL: fixed Meta fields %v for %s '%s/%s'", fields, objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
 }

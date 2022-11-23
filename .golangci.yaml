@@ -10,6 +10,10 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   modules-download-mode: mod
+  exclude:
+    - '^shadow:\s+declaration\s+of\s+"err"\s+shadows\s+declaration\s+at\s+line'
+    - '^shadow:\s+declaration\s+of\s+"ok"\s+shadows\s+declaration\s+at\s+line'
+    - '^shadow:\s+declaration\s+of\s+"ctx"\s+shadows\s+declaration\s+at\s+line'
   exclude-rules:
     # # allow dot-importing ginkgo and gomega
     # - linters: [golint, stylecheck]
@@ -42,63 +46,57 @@ issues:
     - linters: [revive]
       text: "var-naming:"
     - linters: [revive]
+      text: "defer: prefer not to defer chains of function calls"
+    - linters: [revive]
       text: "struct-tag: unknown option 'inline' in JSON tag"
     - linters: [revive]
       text: "defer: prefer not to defer inside loops"
+    - linters: [wsl]
+      text: "if statements should only be cuddled with assignments"
+    - linters: [wsl]
+      text: "Sort is a convenience method: x.Sort() calls Sort(x)."
     - linters: [revive]
       text: "unexported-naming:"
       path: _test\.go
     - linters: [forcetypeassert]
       path: _test\.go
 linters:
-  disable-all: true
-  enable: # use `golangci-lint help linters` to get full list
-    - gofmt
-    # - goimports
-    - stylecheck
-    - govet
+  enable-all: true
+  disable:
+    - gomoddirectives
+    - thelper
+    - cyclop
+    - deadcode # is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused.
+    - errname
+    - exhaustivestruct # is deprecated (since v1.46.0) due to: The owner seems to have abandoned the linter.  Replaced by exhaustruct.
+    - exhaustruct
+    - funlen
+    - gocognit
+    - godot
+    - godox
     - goerr113
-    - staticcheck
-    - errcheck
-    - gocritic
-    - gocyclo
-    - prealloc
-    - gosimple
-    - misspell
-    - exportloopref
-    - unconvert
-    - nakedret
-    - deadcode
-    - ineffassign
-    - structcheck
-    - typecheck
-    - unused
-    - varcheck
-    # - unparam
-    # - goconst
-    - gosec
-    - noctx
-    - nolintlint
-    - predeclared
-    - forcetypeassert
-    - errorlint
-    - whitespace
-    - nilerr
-    # - thelper  # RTFM about it !!!
-    - revive
-    # - wsl
-    # - wrapcheck
-    # - funlen
-    # - forbidigo
-    # - dupl
-    # - nestif
-    #- gochecknoglobals
-    #- gochecknoinits
-    #- depguard
-    #- interfacer
-    # - unindent
-    # - rapcheck
-    # - paralleltest
+    - gofumpt
+    - golint # is deprecated (since v1.41.0) due to: The repository of the linter has been archived by the owner.  Replaced by revive.
+    - ifshort # is deprecated (since v1.48.0) due to: The repository of the linter has been deprecated by the owner.
+    - interfacebloat
+    - interfacer # is deprecated (since v1.38.0) due to: The repository of the linter has been archived by the owner.
+    - ireturn
+    - lll
+    - maligned # is deprecated (since v1.38.0) due to: The repository of the linter has been archived by the owner.  Replaced by govet 'fieldalignment'.
+    - nestif
+    - nlreturn
+    - nonamedreturns
+    - nosnakecase # is deprecated (since v1.48.1) due to: The repository of the linter has been deprecated by the owner.  Replaced by revive(var-naming).
+    - paralleltest
+    - rowserrcheck # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
+    - scopelint # is deprecated (since v1.39.0) due to: The repository of the linter has been deprecated by the owner.  Replaced by exportloopref.
+    - sqlclosecheck # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
+    - structcheck # is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused.
+    - structcheck # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
+    - varcheck # is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused.
+    - varnamelen
+    - wastedassign # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
+    - wsl
 linters-settings:
   goimports:
     local-prefixes: github.com/Mirantis/kaas-ipam,gerrit.mcp.mirantis.com/kaas/core,github.com/Mirantis/lcm,github.com/metal3-io/baremetal-operator,sigs.k8s.io/cluster-api-provider-openstack
@@ -186,12 +184,10 @@ linters-settings:
       hugeParam:
         sizeThreshold: 80 # size in bytes that makes the warning trigger (default 80)
   govet:
-    check-shadowing: false # report about shadowed variables
-    # enable:
-    #   - atomicalign
-    #   - fieldalignment
-    # disable:
-    #   - shadow
+    check-shadowing: true
+    enable-all: true
+    disable:
+      - fieldalignment
   revive:
     rules:
       # keep a full list here, disable rules with a comment if needed
@@ -217,8 +213,6 @@ linters-settings:
       - name: constant-logical-expr
       - name: context-as-argument
       - name: context-keys-type
-      - name: cyclomatic
-        disabled: true # hard to get any meaningful benchmark for this
       - name: deep-exit
       - name: defer
       - name: dot-imports

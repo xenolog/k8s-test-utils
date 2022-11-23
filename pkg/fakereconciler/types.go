@@ -74,11 +74,11 @@ type FakeReconciler interface {
 	// WaitToFieldBeChecked -- block gorutine while corresponded CRD field will be exists and checked by callback function.
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use stored early
-	WaitToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(interface{}) bool) error
+	WaitToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) error
 
 	// WatchToFieldBeChecked -- run gorutine to wait while corresponded CRD field will be exists and checked by callback function.
 	// Pass nil instead context, to use stored early
-	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(interface{}) bool) (chan error, error)
+	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) (chan error, error)
 
 	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error

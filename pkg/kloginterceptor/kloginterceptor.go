@@ -41,7 +41,7 @@ func PublishKlogOutputIfFailed(t *testing.T) func() {
 	}
 }
 
-func PublishObjDumpIfFailed(memo string, t *testing.T, obj interface{}) func() {
+func PublishObjDumpIfFailed(memo string, t *testing.T, obj any) func() {
 	return func() {
 		if t.Failed() {
 			t.Logf("k8s object %s:\n%s\n", memo, pp.Sprintln(obj))

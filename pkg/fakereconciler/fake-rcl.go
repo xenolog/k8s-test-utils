@@ -27,7 +27,7 @@ import (
 
 const (
 	PauseTime           = 127 * time.Millisecond
-	ControlChanBuffSize = 8
+	ControlChanBuffSize = 255
 )
 
 var (
@@ -301,7 +301,7 @@ func (r *ReconcileResponce) String() string {
 }
 
 func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj client.Object) {
-	meta := map[string]interface{}{}
+	meta := map[string]any{}
 	objType := obj.GetObjectKind().GroupVersionKind().Kind
 
 	if uid := obj.GetUID(); uid == "" {
@@ -323,7 +323,7 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		}
 		fields.Sort()
 		buff, err := json.Marshal(struct {
-			M map[string]interface{} `json:"metadata"`
+			M map[string]any `json:"metadata"`
 		}{M: meta})
 		if err != nil {
 			klog.Errorf("RCL: unable to marshal Meta patch for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)

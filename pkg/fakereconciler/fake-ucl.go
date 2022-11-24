@@ -81,8 +81,8 @@ func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string,
 		if !isReconciled {
 			return true
 		}
-		_, ok := in.(map[string]any)
-		return ok
+		status, ok := in.(map[string]any)
+		return ok && len(status) > 0
 	})
 }
 

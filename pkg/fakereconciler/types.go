@@ -38,33 +38,33 @@ type FakeReconciler interface {
 
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
 	// If isReconciled is false just reconciliation record (fact) will be probed,
-	// else (if true) -- reconciled result (status exists) will be waited.
-	// Pass nil instead context, to use stored early
+	// else (if true) -- reconciled result (status exists and not empty) will be waited.
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) error
 
 	// WatchToBeCreated -- run gorutine to wait while corresponded CRD will be created.
 	// If isReconciled is false just reconciliation record (fact) will be probed,
-	// else (if true) -- reconciled result (status exists) will be waited.
+	// else (if true) -- reconciled result (status exists and not empty) will be watched.
 	// Does not block current gorutine,  error chan returned to obtain result if need
-	// Pass nil instead context, to use stored early
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WatchToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) (chan error, error)
 
 	// WaitToBeReconciled -- block gorutine while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
-	// Pass nil instead context, to use stored early
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error
 
 	// WatchToBeReconciled -- run gorutine to wait while corresponded CRD will be reconciled.
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
 	// Does not block current gorutine,  error chan returned to obtain result if need
-	// Pass nil instead context, to use stored early
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error)
 
 	// WaitToFieldSatisfyRE -- block gorutine while corresponded CRD field will be satisfy to the given regexp.
 	// The dot '.' is a separator in the fieldPath
-	// Pass nil instead context, to use stored early
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) error
 
 	// WatchToFieldSatisfyRE -- run gorutine to wait while corresponded CRD field will be satisfy to the given regexp.
@@ -73,11 +73,11 @@ type FakeReconciler interface {
 
 	// WaitToFieldBeChecked -- block gorutine while corresponded CRD field will be exists and checked by callback function.
 	// The dot '.' is a separator in the fieldPath
-	// Pass nil instead context, to use stored early
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) error
 
 	// WatchToFieldBeChecked -- run gorutine to wait while corresponded CRD field will be exists and checked by callback function.
-	// Pass nil instead context, to use stored early
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) (chan error, error)
 
 	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)

@@ -34,7 +34,7 @@ type FakeReconciler interface {
 
 	// LockReconciler -- lock watchers/reconcilers for the specifyed Kind type.
 	// returns callable to Unock thread
-	LockReconciler(kindName string) func()
+	LockReconciler(kindName string) (unlock func())
 
 	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
 	// If isReconciled is false just reconciliation record (fact) will be probed,

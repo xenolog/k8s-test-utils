@@ -22,7 +22,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 	if err != nil {
 		return nil, err
 	}
-	respChan := make(chan error, ControlChanBuffSize)
+	respChan := make(chan error, 1) // buffered to push-and-close result
 	logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 
 	r.userTasksWG.Add(1)
@@ -130,7 +130,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	if err != nil {
 		return nil, err
 	}
-	respChan := make(chan error, ControlChanBuffSize)
+	respChan := make(chan error, 1) // buffered to push-and-close result
 	nName := utils.KeyToNamespacedName(key)
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(*rr.gvk)
@@ -202,7 +202,7 @@ func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, e
 	var respChan chan *ReconcileResponce
 	rr, err := r.getKindStruct(kind)
 	if err == nil {
-		respChan = make(chan *ReconcileResponce, ControlChanBuffSize)
+		respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
 		rr.askToReconcile <- &reconcileRequest{
 			Key:      key,
 			RespChan: respChan,

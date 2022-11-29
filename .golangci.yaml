@@ -114,51 +114,73 @@ linters-settings:
       - builtinShadowDecl
       - captLocal
       - caseOrder
+      - codegenComment
       - commentedOutImport
       - defaultCaseOrder
       - deferUnlambda
       - deprecatedComment
-      - docStub # ?????
+      - docStub
       - dupArg
       - dupBranchBody
       - dupCase
       - dupImport
       - dupSubExpr
       - elseif
+      - emptyDecl
+      - emptyFallthrough
       - emptyStringTest
       - equalFold
       - evalOrder
       - exitAfterDefer
+      # - exposedSyncMutex
+      - externalErrorReassign
       - filepathJoin
       - flagDeref
       - flagName
       - hexLiteral
+      - httpNoBody
       - hugeParam
       - ifElseChain
       - importShadow
       - indexAlloc
-      - initClause # ?????
+      - initClause
+      - ioutilDeprecated
       - mapKey
       - methodExprCall
-      # - nestingReduce
+      - nestingReduce
       - newDeref
       - nilValReturn
+      - octalLiteral
       - offBy1
       - paramTypeCombine
+      - preferDecodeRune
+      - preferFilepathJoin
+      - preferFprint
+      - preferStringWriter
+      - preferWriteByte
       - ptrToRefParam
-      - rangeExprCopy # !!!!!
+      - rangeExprCopy
       - rangeValCopy
+      - redundantSprint
       - regexpMust
       - regexpPattern
       - regexpSimplify
+      - returnAfterHttpError
       - singleCaseSwitch
+      - sliceClear
       - sloppyLen
       - sloppyReassign
       - sloppyTypeAssert
       - sortSlice
+      - sprintfQuotedString
       - sqlQuery
+      - stringConcatSimplify
       - stringXbytes
+      # - suspiciousSorting
       - switchTrue
+      - syncMapLoadAndDelete
+      - timeExprSimplify
+      - tooManyResultsChecker
       - truncateCmp
       - typeAssertChain
       - typeDefFirst
@@ -167,11 +189,13 @@ linters-settings:
       - underef
       - unlabelStmt
       - unlambda
+      - unnamedResult
       - unnecessaryBlock
       - unnecessaryDefer
       - unslice
       - valSwap
       - weakCond
+      # - whyNoLint -- does not work properly
       - wrapperFunc
       - yodaStyleExpr
     # disabled-checks:

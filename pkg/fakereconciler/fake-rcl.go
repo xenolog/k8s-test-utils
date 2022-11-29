@@ -58,7 +58,7 @@ type fakeReconciler struct {
 	scheme          *runtime.Scheme
 	kinds           map[string]*kindWatcherData
 	client          client.WithWatch
-	mainloopContext context.Context //nolint:containedctx
+	mainloopContext context.Context //nolint: containedctx
 	watchersWG      sync.WaitGroup
 	userTasksWG     sync.WaitGroup
 }
@@ -217,7 +217,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 					klog.Errorf("RCL error: %s", err)
 				}
 			case watch.Bookmark, watch.Error:
-				fallthrough
+				fallthrough //nolint: gocritic
 			default:
 				klog.Warning("RCL: unsupported event")
 			}

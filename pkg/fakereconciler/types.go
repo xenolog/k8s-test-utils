@@ -12,7 +12,6 @@ import (
 )
 
 type FakeReconciler interface {
-
 	// Run main loop to watch create/delete/reconcile requests.
 	// Context will be stored to future use
 	Run(ctx context.Context)

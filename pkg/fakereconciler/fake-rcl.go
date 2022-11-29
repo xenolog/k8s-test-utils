@@ -30,9 +30,7 @@ const (
 	ControlChanBuffSize = 255
 )
 
-var (
-	errStoppedFromTheOutside = errors.New("Stopped from the outside (main loop context cancelled or deadline expired)")
-)
+var errStoppedFromTheOutside = errors.New("Stopped from the outside (main loop context cancelled or deadline expired)")
 
 type reconcileRequest struct {
 	Key      string
@@ -68,6 +66,7 @@ type fakeReconciler struct {
 func (r *fakeReconciler) GetClient() client.WithWatch {
 	return r.client
 }
+
 func (r *fakeReconciler) GetScheme() *runtime.Scheme {
 	return r.scheme
 }

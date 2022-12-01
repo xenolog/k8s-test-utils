@@ -3,7 +3,6 @@ package fakereconciler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -29,8 +28,6 @@ const (
 	PauseTime           = 127 * time.Millisecond
 	ControlChanBuffSize = 255
 )
-
-var errStoppedFromTheOutside = errors.New("Stopped from the outside (main loop context cancelled or deadline expired)")
 
 type reconcileRequest struct {
 	Key      string
@@ -156,29 +153,34 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			klog.Infof("RCL: Watcher for %s finished", kind)
 			return
 		case req := <-kindWD.askToReconcile:
+			var rv *ReconcileResponce
+			if req.RespChan == nil {
+				klog.Errorf("RCL: Unable to process reconcile request for %s '%s': empty response chan given", kind, req.Key)
+				break
+			}
+
 			kindWD.Lock()
 			klog.Infof("RCL: %s '%s' Req to reconcile", kind, req.Key)
 			nName := utils.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kindWD.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
-				klog.Errorf("RCL error: %s", err)
-				kindWD.Unlock()
-				break
-			}
-
-			rv := r.doReconcile(ctx, kind, obj)
-			if req.RespChan != nil {
-				req.RespChan <- rv
-				close(req.RespChan)
-			}
-			rvString := fmt.Sprintf("RCL: %s '%s' Reconcile result: %s", kind, req.Key, rv)
-			if rv.Err != nil {
-				klog.Errorf(rvString)
+				klog.Errorf("RCL: Unable to process reconcile request for %s '%s': %s", kind, req.Key, err)
+				now := time.Now()
+				rv = &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{now, now}}
 			} else {
-				klog.Infof(rvString)
+				// object fetched, call Reconcile(...)
+				rv = r.doReconcile(ctx, kind, obj)
+				rvString := fmt.Sprintf("RCL: %s '%s' Reconcile result: %s", kind, req.Key, rv)
+				if rv.Err != nil {
+					klog.Errorf(rvString)
+				} else {
+					klog.Infof(rvString)
+				}
 			}
-			kindWD.Unlock()
+			req.RespChan <- rv  // should
+			close(req.RespChan) // be
+			kindWD.Unlock()     // together
 		case in := <-watcher.ResultChan():
 			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {

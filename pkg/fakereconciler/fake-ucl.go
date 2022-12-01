@@ -47,8 +47,8 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 			select {
 			case <-r.mainloopContext.Done():
-				klog.Warningf(k8t.FmtKW, logKey, errStoppedFromTheOutside)
-				respChan <- errStoppedFromTheOutside
+				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
+				respChan <- r.mainloopContext.Err()
 				return
 			case <-ctx.Done():
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
@@ -164,12 +164,12 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 			}
 			select {
 			case <-r.mainloopContext.Done():
-				klog.Warningf(k8t.FmtKW, logKey, errStoppedFromTheOutside)
-				respChan <- errStoppedFromTheOutside
+				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
+				respChan <- r.mainloopContext.Err()
 				return
 			case <-ctx.Done():
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
-				respChan <- errStoppedFromTheOutside
+				respChan <- ctx.Err()
 				return
 			case <-time.After(PauseTime):
 				continue
@@ -201,14 +201,15 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
 	var respChan chan *ReconcileResponce
 	rr, err := r.getKindStruct(kind)
-	if err == nil {
-		respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
-		rr.askToReconcile <- &reconcileRequest{
-			Key:      key,
-			RespChan: respChan,
-		}
+	if err != nil {
+		return nil, err
 	}
-	return respChan, err
+	respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
+	rr.askToReconcile <- &reconcileRequest{
+		Key:      key,
+		RespChan: respChan,
+	}
+	return respChan, nil
 }
 
 // Lock -- lock watchers/reconcilers for the specifyed Kind type.

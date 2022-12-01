@@ -25,32 +25,41 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 		return nil, fmt.Errorf("Unable to watch: %w", err)
 	}
 
-	kindWatcherData, err := r.getKindStruct(kindName)
-	if err != nil {
+	if _, err := r.getKindStruct(kindName); err != nil {
 		return nil, err
 	}
 	respChan := make(chan error, 1) // buffered to push-and-close result
 	logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 
 	r.userTasksWG.Add(1)
-	go func() {
+	go func(kindName, key string) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
 		for {
-			r.Lock()
-			objRec, ok := kindWatcherData.processedObjs[key]
-			r.Unlock()
-			if ok && !objRec.running && len(objRec.log) > 0 {
+			kwd, err := r.getKindStruct(kindName)
+			if err != nil {
+				respChan <- err
+			}
+			objRec, ok := kwd.GetObj(key)
+			switch {
+			case !ok:
+				respChan <- fmt.Errorf("object %s '%s' record %w, may be deleted", kindName, key, k8t.ErrorNotFound)
+				return
+			case objRec.deleted:
+				respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
+				return
+			case !objRec.running && len(objRec.log) > 0:
 				// record about reconcile passed found
 				if reconciledAfter.IsZero() {
 					respChan <- nil
 					return
 				}
-				if objRec.log[len(objRec.log)-1].StartFinishTime[0].After(reconciledAfter) {
+				lastReconcileTs := objRec.log[len(objRec.log)-1].StartFinishTime[0]
+				if lastReconcileTs.After(reconciledAfter) {
 					respChan <- nil
 					return
 				}
-				klog.Warningf("%s: reconciled earlier, than '%s', continue waiting...", logKey, reconciledAfter)
+				klog.Warningf("%s: reconciled at '%s', earlier than '%s', continue waiting...", logKey, lastReconcileTs.Format(k8t.FmtRFC3339), reconciledAfter.UTC().Format(k8t.FmtRFC3339))
 			}
 			select {
 			case <-r.mainloopContext.Done():
@@ -65,7 +74,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				continue
 			}
 		}
-	}()
+	}(kindName, key)
 
 	return respChan, nil
 }

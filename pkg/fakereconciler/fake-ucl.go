@@ -16,7 +16,7 @@ import (
 
 func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
 	if r.mainloopContext == nil {
-		return nil, fmt.Errorf("Unable to watch, MainLoop not started")
+		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")
 	}
 	if ctx == nil {
 		ctx = r.mainloopContext //nolint: contextcheck
@@ -73,8 +73,12 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error {
 	respCh, err := r.WatchToBeReconciled(ctx, kindName, key, reconciledAfter)
 	if err == nil {
-		if _, ok := <-respCh; !ok {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
 		}
 	}
 	return err
@@ -96,8 +100,12 @@ func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string,
 func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, isReconciled bool) error {
 	respCh, err := r.WatchToBeCreated(ctx, kind, key, isReconciled)
 	if err == nil {
-		if _, ok := <-respCh; !ok {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
 		}
 	}
 	return err
@@ -120,8 +128,12 @@ func (r *fakeReconciler) WatchToFieldSatisfyRE(ctx context.Context, kind, key, f
 func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) error {
 	respCh, err := r.WatchToFieldSatisfyRE(ctx, kind, key, fieldpath, reString)
 	if err == nil {
-		if _, ok := <-respCh; !ok {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
 		}
 	}
 	return err
@@ -131,7 +143,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 
 func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
 	if r.mainloopContext == nil {
-		return nil, fmt.Errorf("Unable to watch, MainLoop not started")
+		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")
 	}
 	if ctx == nil {
 		ctx = r.mainloopContext //nolint: contextcheck
@@ -216,7 +228,7 @@ func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, e
 	var respChan chan *ReconcileResponce
 
 	if r.mainloopContext == nil {
-		return nil, fmt.Errorf("Unable to reconcile, MainLoop not started")
+		return nil, fmt.Errorf("Unable to reconcile, MainLoop is not started")
 	}
 	if err := r.mainloopContext.Err(); err != nil {
 		return nil, fmt.Errorf("Unable to reconcile: %w", err)

@@ -16,7 +16,7 @@ import (
 
 func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
 	if ctx == nil {
-		ctx = r.mainloopContext //nolint:contextcheck
+		ctx = r.mainloopContext //nolint: contextcheck
 	}
 	kindWatcherData, err := r.getKindStruct(kindName)
 	if err != nil {
@@ -47,11 +47,11 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 			select {
 			case <-r.mainloopContext.Done():
-				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
-				respChan <- errStoppedFromTheOutside
+				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
+				respChan <- r.mainloopContext.Err()
 				return
 			case <-ctx.Done():
-				klog.Warningf("%s: %s", logKey, ctx.Err())
+				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
 			case <-time.After(PauseTime):
@@ -67,7 +67,7 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 	respCh, err := r.WatchToBeReconciled(ctx, kindName, key, reconciledAfter)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
 		}
 	}
 	return err
@@ -75,7 +75,7 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 
 //-----------------------------------------------------------------------------
 
-func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) {
+func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) { //revive:disable:flag-parameter
 	logKey := fmt.Sprintf("RCL: WaitingToCreate [%s] '%s'", kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in any) bool {
 		if !isReconciled {
@@ -90,7 +90,7 @@ func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, 
 	respCh, err := r.WatchToBeCreated(ctx, kind, key, isReconciled)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
 		}
 	}
 	return err
@@ -114,7 +114,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 	respCh, err := r.WatchToFieldSatisfyRE(ctx, kind, key, fieldpath, reString)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
 		}
 	}
 	return err
@@ -124,7 +124,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 
 func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
 	if ctx == nil {
-		ctx = r.mainloopContext //nolint:contextcheck
+		ctx = r.mainloopContext //nolint: contextcheck
 	}
 	rr, err := r.getKindStruct(kind)
 	if err != nil {
@@ -164,12 +164,12 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 			}
 			select {
 			case <-r.mainloopContext.Done():
-				klog.Warningf("%s: %s", logKey, errStoppedFromTheOutside)
-				respChan <- errStoppedFromTheOutside
+				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
+				respChan <- r.mainloopContext.Err()
 				return
 			case <-ctx.Done():
-				klog.Warningf("%s: %s", logKey, ctx.Err())
-				respChan <- errStoppedFromTheOutside
+				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
+				respChan <- ctx.Err()
 				return
 			case <-time.After(PauseTime):
 				continue
@@ -180,7 +180,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	return respChan, err
 }
 
-func (r *fakeReconciler) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
+func (r *fakeReconciler) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(any) bool) (chan error, error) { //revive:disable:confusing-naming
 	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked [%s] '%s'", kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, callback)
 }
@@ -189,7 +189,7 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 	respCh, err := r.WatchToFieldBeChecked(ctx, kind, key, fieldpath, callback)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf("%w: Response chan unexpectable closed.", k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
 		}
 	}
 	return err
@@ -201,14 +201,15 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
 	var respChan chan *ReconcileResponce
 	rr, err := r.getKindStruct(kind)
-	if err == nil {
-		respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
-		rr.askToReconcile <- &reconcileRequest{
-			Key:      key,
-			RespChan: respChan,
-		}
+	if err != nil {
+		return nil, err
 	}
-	return respChan, err
+	respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
+	rr.askToReconcile <- &reconcileRequest{
+		Key:      key,
+		RespChan: respChan,
+	}
+	return respChan, nil
 }
 
 // Lock -- lock watchers/reconcilers for the specifyed Kind type.

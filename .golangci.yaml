@@ -1,5 +1,6 @@
 ---
 run:
+  go: "1.19"
   timeout: 5m
   skip-files:
     - "pkg/client/internalclientset/.*"
@@ -75,7 +76,6 @@ linters:
     - godot
     - godox
     - goerr113
-    - gofumpt
     - golint # is deprecated (since v1.41.0) due to: The repository of the linter has been archived by the owner.  Replaced by revive.
     - ifshort # is deprecated (since v1.48.0) due to: The repository of the linter has been deprecated by the owner.
     - interfacebloat
@@ -87,12 +87,10 @@ linters:
     - nlreturn
     - nonamedreturns
     - nosnakecase # is deprecated (since v1.48.1) due to: The repository of the linter has been deprecated by the owner.  Replaced by revive(var-naming).
-    - paralleltest
     - rowserrcheck # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
     - scopelint # is deprecated (since v1.39.0) due to: The repository of the linter has been deprecated by the owner.  Replaced by exportloopref.
     - sqlclosecheck # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
     - structcheck # is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused.
-    - structcheck # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
     - varcheck # is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused.
     - varnamelen
     - wastedassign # is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
@@ -115,51 +113,73 @@ linters-settings:
       - builtinShadowDecl
       - captLocal
       - caseOrder
+      - codegenComment
       - commentedOutImport
       - defaultCaseOrder
       - deferUnlambda
       - deprecatedComment
-      - docStub # ?????
+      - docStub
       - dupArg
       - dupBranchBody
       - dupCase
       - dupImport
       - dupSubExpr
       - elseif
+      - emptyDecl
+      - emptyFallthrough
       - emptyStringTest
       - equalFold
       - evalOrder
       - exitAfterDefer
+      # - exposedSyncMutex
+      - externalErrorReassign
       - filepathJoin
       - flagDeref
       - flagName
       - hexLiteral
+      - httpNoBody
       - hugeParam
       - ifElseChain
       - importShadow
       - indexAlloc
-      - initClause # ?????
+      - initClause
+      - ioutilDeprecated
       - mapKey
       - methodExprCall
-      # - nestingReduce
+      - nestingReduce
       - newDeref
       - nilValReturn
+      - octalLiteral
       - offBy1
       - paramTypeCombine
+      - preferDecodeRune
+      - preferFilepathJoin
+      - preferFprint
+      - preferStringWriter
+      - preferWriteByte
       - ptrToRefParam
-      - rangeExprCopy # !!!!!
+      - rangeExprCopy
       - rangeValCopy
+      - redundantSprint
       - regexpMust
       - regexpPattern
       - regexpSimplify
+      - returnAfterHttpError
       - singleCaseSwitch
+      - sliceClear
       - sloppyLen
       - sloppyReassign
       - sloppyTypeAssert
       - sortSlice
+      - sprintfQuotedString
       - sqlQuery
+      - stringConcatSimplify
       - stringXbytes
+      # - suspiciousSorting
       - switchTrue
+      - syncMapLoadAndDelete
+      - timeExprSimplify
+      - tooManyResultsChecker
       - truncateCmp
       - typeAssertChain
       - typeDefFirst
@@ -168,11 +188,13 @@ linters-settings:
       - underef
       - unlabelStmt
       - unlambda
+      - unnamedResult
       - unnecessaryBlock
       - unnecessaryDefer
       - unslice
       - valSwap
       - weakCond
+      # - whyNoLint -- does not work properly
       - wrapperFunc
       - yodaStyleExpr
     # disabled-checks:
@@ -183,100 +205,96 @@ linters-settings:
         skipTestFuncs: true
       hugeParam:
         sizeThreshold: 80 # size in bytes that makes the warning trigger (default 80)
+  staticcheck:
+    # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
+    # Default: ["*"]
+    checks: ["all"]
+  gosec:
+    exclude-generated: true
+    severity: high
+    confidence: high
+    includes: []
+  gosimple:
+    checks: ["all"]
   govet:
     check-shadowing: true
     enable-all: true
     disable:
       - fieldalignment
+  makezero:
+    # Allow only slices initialized with a length of zero.
+    always: true
   revive:
+    ignore-generated-header: true
+    severity: warning
+    enable-all-rules: true
     rules:
-      # keep a full list here, disable rules with a comment if needed
+      - name: cyclomatic
+        disabled: true
+      - name: line-length-limit
+        arguments: [240]
+      - name: file-header
+        disabled: true
+      - name: max-public-structs
+        disabled: true
+      - name: cognitive-complexity
+        disabled: true
+      - name: function-length
+        disabled: true
+      - name: function-result-limit
+        disabled: true
+      - name: argument-limit
+        disabled: true
+      - name: banned-characters
+        disabled: true
       - name: add-constant
         arguments:
           - maxLitCount: "3"
             allowStrs: '"","/"'
             allowInts: "0,1,2"
-        disabled: true # should be fixed in code
-      - name: argument-limit
-        disabled: true # no meaninful limit
-      - name: atomic
-      - name: bare-return
-        disabled: true # should be fixed in code
-      - name: blank-imports
-      - name: bool-literal-in-expr
-      - name: call-to-gc
-      - name: cognitive-complexity
-        disabled: true # hard to get any meaningful benchmark for this
-      - name: confusing-naming
-        disabled: true # should be fixed in code
-      - name: confusing-results
-      - name: constant-logical-expr
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: deep-exit
-      - name: defer
-      - name: dot-imports
-      - name: duplicated-imports
-      - name: early-return
-        disabled: true # should be fixed in code
-      - name: empty-block
-      - name: empty-lines
-      - name: error-naming
-      - name: error-return
-      - name: error-strings
-      - name: errorf
-      - name: exported
-      - name: file-header
-        disabled: true # we don't have any specific header
-      - name: flag-parameter
-        disabled: true # should be fixed in code
-      - name: function-length
-        disabled: true # should be fixed in code
-      - name: function-result-limit
-        #   arguments: [4]
-        disabled: true
-      - name: get-return
-      - name: identical-branches
-      - name: if-return
-        disabled: true # separating "return nil" makes for cleaner code sometimes
-      - name: import-shadowing
       - name: imports-blacklist
-      - name: increment-decrement
-      - name: indent-error-flow
-      - name: line-length-limit
-        disabled: true # no limit necessary here
-      - name: max-public-structs
-        disabled: true # pkg/api exports lots of structs, no need to limit that
-      - name: modifies-parameter
-      - name: modifies-value-receiver
-      - name: package-comments
-      - name: range
-      - name: range-val-address
-      - name: range-val-in-closure
-      - name: receiver-naming
-      - name: redefines-builtin-id
-      - name: string-format
-      - name: string-of-int
-      - name: struct-tag
-      - name: superfluous-else
-      - name: time-naming
-      - name: unconditional-recursion
-      - name: unexported-naming
-      - name: unexported-return
+        arguments:
+          - "crypto/md5"
+          - "crypto/sha1"
+      - name: defer
+        arguments:
+          - ["call-chain", "loop"]
+      - name: var-naming
+        arguments:
+          - ["ID"] # AllowList
+          - ["VM"] # DenyList
       - name: unhandled-error
         arguments:
-          # print to stdout
           - fmt.Print
           - fmt.Printf
           - fmt.Println
-        disabled: true # should be fixed in code
-      - name: unnecessary-stmt
-      - name: unreachable-code
-      - name: unused-parameter
-        disabled: true # should be fixed in code
-      - name: unused-receiver
-        disabled: true # this made code ugly
-      - name: var-declaration
-      - name: var-naming
-      - name: waitgroup-by-value
+      - name: string-format
+        arguments:
+          - - "core.WriteError[1].Message"
+            - "/^([^A-Z]|$)/"
+            - must not start with a capital letter
+          - - "fmt.Errorf[0]"
+            - '/(^|[^\.!?])$/'
+            - must not end in punctuation
+          - - panic
+            - '/^[^\n]*$/'
+            - must not contain line breaks
+  gofmt:
+    # Apply the rewrite rules to the source before reformatting.
+    # https://pkg.go.dev/cmd/gofmt
+    # Default: []
+    rewrite-rules:
+      - pattern: "interface{}"
+        replacement: "any"
+  gofumpt:
+    # Module path which contains the source code being formatted.
+    # Default: ""
+    #module-path: github.com/org/project
+    # Choose whether to use the extra rules.
+    # Default: false
+    extra-rules: true
+  paralleltest:
+    # Ignore missing calls to `t.Parallel()` and only report incorrect uses of it.
+    # Default: false
+    ignore-missing: true
 ###

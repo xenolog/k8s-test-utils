@@ -18,6 +18,10 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 	if ctx == nil {
 		ctx = r.mainloopContext //nolint: contextcheck
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to watch: %w", err)
+	}
+
 	kindWatcherData, err := r.getKindStruct(kindName)
 	if err != nil {
 		return nil, err
@@ -126,6 +130,10 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	if ctx == nil {
 		ctx = r.mainloopContext //nolint: contextcheck
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to watch: %w", err)
+	}
+
 	rr, err := r.getKindStruct(kind)
 	if err != nil {
 		return nil, err
@@ -200,6 +208,11 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 // returns chan which can be used to obtain reconcile responcce and timings
 func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
 	var respChan chan *ReconcileResponce
+
+	if err := r.mainloopContext.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to reconcile: %w", err)
+	}
+
 	rr, err := r.getKindStruct(kind)
 	if err != nil {
 		return nil, err

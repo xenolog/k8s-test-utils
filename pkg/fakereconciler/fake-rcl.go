@@ -227,16 +227,18 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 	}
 }
 
-func (r *fakeReconciler) Run(ctx context.Context) {
-	var deadlineMsg string
+func (r *fakeReconciler) Run(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("Unable to run fakeReconciler: %w", err)
+	}
+
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadlineMsg = "not set"
-	} else {
-		deadlineMsg = fmt.Sprintf("expired in %v", time.Until(deadline).Round(time.Second))
+		return fmt.Errorf("Unable to run fakeReconciler: context deadline not set")
 	}
+
 	klog.Infof(" ") // klog, sometime, eats 1st line of log. why not .
-	klog.Infof("RCL-LOOP: running, deadline %s.", deadlineMsg)
+	klog.Infof("RCL-LOOP: running, deadline expired in %v", time.Until(deadline).Round(time.Second))
 	r.Lock()
 	defer r.Unlock()
 	r.mainloopContext = ctx
@@ -251,6 +253,7 @@ func (r *fakeReconciler) Run(ctx context.Context) {
 		r.watchersWG.Add(1)
 		go r.doWatch(ctx, watcher, kind)
 	}
+	return nil
 }
 
 // todo(sv): will be better to implement in the future

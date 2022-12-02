@@ -13,6 +13,87 @@ import (
 	"k8s.io/klog"
 )
 
+func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) (chan error, error) {
+	if r.mainloopContext == nil {
+		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")
+	}
+	if ctx == nil {
+		ctx = r.mainloopContext //nolint: contextcheck
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to watch: %w", err)
+	}
+
+	if _, err := r.getKindStruct(kindName); err != nil {
+		return nil, err
+	}
+	respChan := make(chan error, 1) // buffered to push-and-close result
+	logKey := fmt.Sprintf("RCL: WaitingToBeDeleted [%s] '%s'", kindName, key)
+
+	r.userTasksWG.Add(1)
+	go func(kindName, key string, rvd bool) {
+		defer r.userTasksWG.Done()
+		defer close(respChan)
+		for {
+			kwd, err := r.getKindStruct(kindName)
+			if err != nil {
+				respChan <- err
+			}
+
+			// check object exists
+			nName := utils.KeyToNamespacedName(key)
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(*kwd.gvk)
+			err = r.client.Get(ctx, nName, obj)
+			switch {
+			case apimErrors.IsNotFound(err):
+				respChan <- nil
+				return
+			case err != nil:
+				respChan <- err
+				return
+			default:
+				if !rvd && !obj.GetDeletionTimestamp().IsZero() {
+					// deletionTimestamp is set and it is enough by user criteria
+					respChan <- nil
+					return
+				}
+			}
+
+			klog.Warningf("%s...", logKey)
+			select {
+			case <-r.mainloopContext.Done():
+				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
+				respChan <- r.mainloopContext.Err()
+				return
+			case <-ctx.Done():
+				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
+				respChan <- ctx.Err()
+				return
+			case <-time.After(PauseTime):
+				continue
+			}
+		}
+	}(kindName, key, requireValidDeletion)
+
+	return respChan, nil
+}
+
+func (r *fakeReconciler) WaitToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) error {
+	respCh, err := r.WatchToBeDeleted(ctx, kindName, key, requireValidDeletion)
+	if err == nil {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
+		}
+	}
+	return err
+}
+
+// -----------------------------------------------------------------------------
 func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
 	if r.mainloopContext == nil {
 		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")

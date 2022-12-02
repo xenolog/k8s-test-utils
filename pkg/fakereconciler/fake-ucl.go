@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
@@ -15,35 +14,58 @@ import (
 )
 
 func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
+	if r.mainloopContext == nil {
+		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")
+	}
 	if ctx == nil {
 		ctx = r.mainloopContext //nolint: contextcheck
 	}
-	kindWatcherData, err := r.getKindStruct(kindName)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to watch: %w", err)
+	}
+
+	if _, err := r.getKindStruct(kindName); err != nil {
 		return nil, err
 	}
 	respChan := make(chan error, 1) // buffered to push-and-close result
 	logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 
 	r.userTasksWG.Add(1)
-	go func() {
+	go func(kindName, key string) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
 		for {
-			r.Lock()
-			objRec, ok := kindWatcherData.processedObjs[key]
-			r.Unlock()
-			if ok && !objRec.running && len(objRec.log) > 0 {
+			kwd, err := r.getKindStruct(kindName)
+			if err != nil {
+				respChan <- err
+			}
+			objRec, ok := kwd.GetObj(key)
+			switch {
+			case !ok:
+				// object record may be absent if object really not found or if object found, but never reconciled
+				// check object exists
+				nName := utils.KeyToNamespacedName(key)
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(*kwd.gvk)
+				if err := r.client.Get(ctx, nName, obj); err != nil {
+					respChan <- fmt.Errorf("RCL: Unable to process reconcile for %s '%s': %w", kindName, key, err)
+					return
+				}
+			case objRec.deleted:
+				respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
+				return
+			case !objRec.running && len(objRec.log) > 0:
 				// record about reconcile passed found
 				if reconciledAfter.IsZero() {
 					respChan <- nil
 					return
 				}
-				if objRec.log[len(objRec.log)-1].StartFinishTime[0].After(reconciledAfter) {
+				lastReconcileTs := objRec.log[len(objRec.log)-1].StartFinishTime[0]
+				if lastReconcileTs.After(reconciledAfter) {
 					respChan <- nil
 					return
 				}
-				klog.Warningf("%s: reconciled earlier, than '%s', continue waiting...", logKey, reconciledAfter)
+				klog.Warningf("%s: reconciled at '%s', earlier than '%s', continue waiting...", logKey, lastReconcileTs.Format(k8t.FmtRFC3339), reconciledAfter.UTC().Format(k8t.FmtRFC3339))
 			}
 			select {
 			case <-r.mainloopContext.Done():
@@ -58,7 +80,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				continue
 			}
 		}
-	}()
+	}(kindName, key)
 
 	return respChan, nil
 }
@@ -66,8 +88,12 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error {
 	respCh, err := r.WatchToBeReconciled(ctx, kindName, key, reconciledAfter)
 	if err == nil {
-		if _, ok := <-respCh; !ok {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
 		}
 	}
 	return err
@@ -89,8 +115,12 @@ func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string,
 func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, isReconciled bool) error {
 	respCh, err := r.WatchToBeCreated(ctx, kind, key, isReconciled)
 	if err == nil {
-		if _, ok := <-respCh; !ok {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
 		}
 	}
 	return err
@@ -113,8 +143,12 @@ func (r *fakeReconciler) WatchToFieldSatisfyRE(ctx context.Context, kind, key, f
 func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) error {
 	respCh, err := r.WatchToFieldSatisfyRE(ctx, kind, key, fieldpath, reString)
 	if err == nil {
-		if _, ok := <-respCh; !ok {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
 		}
 	}
 	return err
@@ -122,10 +156,19 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 
 //-----------------------------------------------------------------------------
 
+var fieldPathSplitRE = regexp.MustCompile(`[.:/]`)
+
 func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
+	if r.mainloopContext == nil {
+		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")
+	}
 	if ctx == nil {
 		ctx = r.mainloopContext //nolint: contextcheck
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to watch: %w", err)
+	}
+
 	rr, err := r.getKindStruct(kind)
 	if err != nil {
 		return nil, err
@@ -134,7 +177,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	nName := utils.KeyToNamespacedName(key)
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(*rr.gvk)
-	pathSlice := strings.Split(fieldpath, ".")
+	pathSlice := fieldPathSplitRE.Split(fieldpath, -1)
 
 	r.userTasksWG.Add(1)
 	go func() {
@@ -200,6 +243,14 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 // returns chan which can be used to obtain reconcile responcce and timings
 func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
 	var respChan chan *ReconcileResponce
+
+	if r.mainloopContext == nil {
+		return nil, fmt.Errorf("Unable to reconcile, MainLoop is not started")
+	}
+	if err := r.mainloopContext.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to reconcile: %w", err)
+	}
+
 	rr, err := r.getKindStruct(kind)
 	if err != nil {
 		return nil, err

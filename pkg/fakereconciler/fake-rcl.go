@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	"github.com/xenolog/k8s-utils/pkg/utils"
+	apimErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,7 @@ type reconcileStatus struct {
 	sync.Mutex
 	log     []ReconcileResponce
 	nName   apimTypes.NamespacedName
+	deleted bool
 	running bool
 }
 
@@ -76,6 +78,24 @@ func (r *fakeReconciler) getKindStruct(kind string) (*kindWatcherData, error) {
 		return nil, fmt.Errorf("Kind '%s' does not served by this reconcile loop, %w", kind, k8t.ErrorDoNothing)
 	}
 	return rv, nil
+}
+
+func (r *kindWatcherData) GetObj(key string) (*reconcileStatus, bool) {
+	r.Lock()
+	defer r.Unlock()
+	rv, ok := r.processedObjs[key]
+	return rv, ok
+}
+
+func (r *kindWatcherData) DeleteObj(key string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	if _, ok := r.processedObjs[key]; !ok {
+		return fmt.Errorf("%s '%s' %w", r.kind, key, k8t.ErrorNotFound)
+	}
+	delete(r.processedObjs, key)
+	return nil
 }
 
 func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj client.Object) *ReconcileResponce {
@@ -195,14 +215,30 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			case watch.Deleted:
 				if len(k8sObj.GetFinalizers()) == 0 {
 					// no finalizers, object will be deleted by fake client
+					if err := r.client.Delete(ctx, k8sObj); err != nil && !apimErrors.IsNotFound(err) {
+						klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
+					}
+					// forget about deleted object
+					kwd, err := r.getKindStruct(nName.String())
+					if err == nil {
+						// if err := kwd.DeleteObj(nName.String()); err != nil {
+						// 	klog.Errorf("RCL: Unable to delete object record: %s", err)
+						// }
+						objRec, ok := kwd.GetObj(nName.String())
+						if !ok {
+							klog.Errorf("RCL: Unable to mark object '%s' to delete", nName)
+						} else {
+							objRec.deleted = true
+						}
+					}
 					klog.Infof("RCL: deletion of [%s] '%s' done, no finalizers.", kindWD.kind, nName)
 				} else {
 					// at least one finalizer found, DeletionTimestamp of the object should be set if absent
 					if k8sObj.GetDeletionTimestamp().IsZero() {
 						now := metav1.Now()
 						k8sObj.SetDeletionTimestamp(&now)
-						if err := r.client.Update(ctx, k8sObj); err != nil {
-							klog.Errorf("RCL Obj '%s' deletion error: %s", nName, err)
+						if err := r.client.Update(ctx, k8sObj); err != nil && !apimErrors.IsNotFound(err) {
+							klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
 						}
 						// MODIFY event will initiate Reconcile automatically
 						klog.Infof("RCL: DeletionTimestamp of [%s] '%s' is set.", kindWD.kind, nName)
@@ -227,16 +263,18 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 	}
 }
 
-func (r *fakeReconciler) Run(ctx context.Context) {
-	var deadlineMsg string
+func (r *fakeReconciler) Run(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("Unable to run fakeReconciler: %w", err)
+	}
+
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadlineMsg = "not set"
-	} else {
-		deadlineMsg = fmt.Sprintf("expired in %v", time.Until(deadline).Round(time.Second))
+		return fmt.Errorf("Unable to run fakeReconciler: context deadline not set")
 	}
+
 	klog.Infof(" ") // klog, sometime, eats 1st line of log. why not .
-	klog.Infof("RCL-LOOP: running, deadline %s.", deadlineMsg)
+	klog.Infof("RCL-LOOP: running, deadline expired in %v", time.Until(deadline).Round(time.Second))
 	r.Lock()
 	defer r.Unlock()
 	r.mainloopContext = ctx
@@ -251,6 +289,7 @@ func (r *fakeReconciler) Run(ctx context.Context) {
 		r.watchersWG.Add(1)
 		go r.doWatch(ctx, watcher, kind)
 	}
+	return nil
 }
 
 // todo(sv): will be better to implement in the future

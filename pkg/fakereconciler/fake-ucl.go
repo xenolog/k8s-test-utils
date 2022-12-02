@@ -39,18 +39,21 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			if err != nil {
 				respChan <- err
 			}
+
+			// check object exists
+			nName := utils.KeyToNamespacedName(key)
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(*kwd.gvk)
+			if err := r.client.Get(ctx, nName, obj); err != nil {
+				respChan <- fmt.Errorf("RCL: Unable to reconcile %s '%s': %w", kindName, key, err)
+				return
+			}
+
 			objRec, ok := kwd.GetObj(key)
 			switch {
 			case !ok:
 				// object record may be absent if object really not found or if object found, but never reconciled
-				// check object exists
-				nName := utils.KeyToNamespacedName(key)
-				obj := &unstructured.Unstructured{}
-				obj.SetGroupVersionKind(*kwd.gvk)
-				if err := r.client.Get(ctx, nName, obj); err != nil {
-					respChan <- fmt.Errorf("RCL: Unable to process reconcile for %s '%s': %w", kindName, key, err)
-					return
-				}
+				klog.Warningf("%s: never reconciled, continue waiting...", logKey)
 			case objRec.deleted:
 				respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
 				return

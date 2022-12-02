@@ -43,8 +43,13 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			objRec, ok := kwd.GetObj(key)
 			switch {
 			case !ok:
-				respChan <- fmt.Errorf("object %s '%s' record %w, may be deleted", kindName, key, k8t.ErrorNotFound)
-				return
+				nName := utils.KeyToNamespacedName(key)
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(*kwd.gvk)
+				if err := r.client.Get(ctx, nName, obj); err != nil {
+					respChan <- fmt.Errorf("RCL: Unable to process reconcile for %s '%s': %w", kindName, key, err)
+					return
+				}
 			case objRec.deleted:
 				respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
 				return

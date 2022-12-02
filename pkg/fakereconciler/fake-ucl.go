@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
@@ -43,6 +42,8 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			objRec, ok := kwd.GetObj(key)
 			switch {
 			case !ok:
+				// object record may be absent if object really not found or if object found, but never reconciled
+				// check object exists
 				nName := utils.KeyToNamespacedName(key)
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(*kwd.gvk)
@@ -155,6 +156,8 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 
 //-----------------------------------------------------------------------------
 
+var fieldPathSplitRE = regexp.MustCompile(`[.:/]`)
+
 func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
 	if r.mainloopContext == nil {
 		return nil, fmt.Errorf("Unable to watch, MainLoop is not started")
@@ -174,7 +177,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	nName := utils.KeyToNamespacedName(key)
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(*rr.gvk)
-	pathSlice := strings.Split(fieldpath, ".")
+	pathSlice := fieldPathSplitRE.Split(fieldpath, -1)
 
 	r.userTasksWG.Add(1)
 	go func() {

@@ -75,6 +75,7 @@ type FakeReconciler interface {
 
 	// WatchToFieldSatisfyRE -- run gorutine to wait while corresponded CRD field will be satisfy to the given regexp.
 	//
+	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use stored early
 	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan error, error)
 
@@ -86,8 +87,21 @@ type FakeReconciler interface {
 
 	// WatchToFieldBeChecked -- run gorutine to wait while corresponded CRD field will be exists and checked by callback function.
 	//
+	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) (chan error, error)
+
+	// WaitToFieldBeNotFound -- block gorutine while corresponded CRD field will be not exists (cleaned).
+	//
+	// The dot '.' is a separator in the fieldPath
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	WaitToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) error
+
+	// WatchToFieldBeNotFound -- run gorutine to wait while corresponded CRD field will be not exists (cleaned).
+	//
+	// The dot '.' is a separator in the fieldPath
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	WatchToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) (chan error, error)
 
 	// WaitToBeDeleted -- block gorutine while corresponded CRD will be deleted.
 	//

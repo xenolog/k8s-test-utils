@@ -1,11 +1,14 @@
 name: unit-tests
 on:
-  push:
-    tags:
-      - v*
+  pull_request:
     branches:
       - master
-      - v*-rc
+  # push:
+  #   # tags:
+  #   #   - v*
+  #   branches:
+  #     - master
+  #     - v*-rc
 permissions:
   contents: read
   # Optional: allow read access to pull request. Use with `only-new-issues` option.

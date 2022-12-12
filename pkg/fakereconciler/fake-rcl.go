@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	PauseTime           = 127 * time.Millisecond
+	PauseTime           = 77 * time.Millisecond
 	ControlChanBuffSize = 255
 
 	MsgUnableToWatch        = "Unable to watch"

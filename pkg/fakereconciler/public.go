@@ -131,3 +131,10 @@ type ReconcileResponce struct {
 	Result          reconcile.Result
 	StartFinishTime k8t.TimeInterval
 }
+
+func (in *ReconcileResponce) IsRequeued() bool {
+	if in.Result.Requeue || in.Result.RequeueAfter != 0 {
+		return true
+	}
+	return false
+}

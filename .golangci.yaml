@@ -52,6 +52,9 @@ issues:
       text: "struct-tag: unknown option 'inline' in JSON tag"
     - linters: [revive]
       text: "defer: prefer not to defer inside loops"
+    - linters: [revive]
+      text: "^confusing-naming: Method '[Rr]econcile' differs only by capitalization"
+      path: fake-.+\.go
     - linters: [wsl]
       text: "if statements should only be cuddled with assignments"
     - linters: [wsl]

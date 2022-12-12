@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	BasePauseTime       = 127 // ms
+	BasePauseTime       = 373 // ms
 	ControlChanBuffSize = 255
 
 	MsgUnableToWatch        = "Unable to watch"
@@ -240,7 +240,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 	}
 }
 
-func (r *fakeReconciler) reconcile(kind, key string) (chan *ReconcileResponce, error) { //revive:disable:confusing-naming
+func (r *fakeReconciler) reconcile(kind, key string) (chan *ReconcileResponce, error) {
 	var respChan chan *ReconcileResponce
 
 	if r.mainloopContext == nil {
@@ -391,5 +391,5 @@ func ensureRequiredMetaFields(ctx context.Context, cl controllerRTclient.WithWat
 }
 
 func GetPauseTime() time.Duration {
-	return time.Duration(BasePauseTime+rand.Intn(33)) * time.Millisecond //nolint
+	return time.Duration(BasePauseTime+rand.Intn(BasePauseTime/4)) * time.Millisecond //nolint
 }

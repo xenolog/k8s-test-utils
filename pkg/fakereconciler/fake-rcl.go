@@ -218,21 +218,18 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			case watch.Deleted:
 				if len(k8sObj.GetFinalizers()) == 0 {
 					// no finalizers, object will be deleted by fake client
-					if err := r.client.Delete(ctx, k8sObj); err != nil && !apimErrors.IsNotFound(err) {
-						klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
-					}
-					// forget about deleted object
+					// fakeReconciler should to forget about deleted object
 					kwd, err := r.getKindStruct(nName.String())
 					if err == nil {
-						// if err := kwd.DeleteObj(nName.String()); err != nil {
-						// 	klog.Errorf("RCL: Unable to delete object record: %s", err)
-						// }
-						objRec, ok := kwd.GetObj(nName.String())
-						if !ok {
-							klog.Errorf("RCL: Unable to mark object '%s' to delete", nName)
-						} else {
-							objRec.deleted = true
+						if err := kwd.DeleteObj(nName.String()); err != nil {
+							klog.Errorf("RCL: Unable to delete object record: %s", err)
 						}
+						// objRec, ok := kwd.GetObj(nName.String())
+						// if !ok {
+						// 	klog.Errorf("RCL: Unable to mark object '%s' to delete", nName)
+						// } else {
+						// 	objRec.deleted = true
+						// }
 					}
 					klog.Infof("RCL: deletion of [%s] '%s' done, no finalizers.", kindWD.kind, nName)
 				} else {

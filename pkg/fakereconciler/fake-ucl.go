@@ -183,7 +183,7 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 //-----------------------------------------------------------------------------
 
 func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) { //revive:disable:flag-parameter
-	logKey := fmt.Sprintf("RCL: WaitingToCreate [%s] '%s'", kind, key)
+	logKey := fmt.Sprintf("RCL: WaitingToBeCreated [%s] '%s'", kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in any) bool {
 		if !isReconciled {
 			return true
@@ -265,6 +265,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 		defer r.userTasksWG.Done()
 		defer close(respChan)
 		for {
+			klog.Warningf("%s...", logKey)
 			err := r.client.Get(ctx, nName, obj)
 			switch {
 			case apimErrors.IsNotFound(err):
@@ -404,26 +405,9 @@ func (r *fakeReconciler) WaitToFieldBeNotFound(ctx context.Context, kind, key, f
 
 // Reconcile -- invoke to reconcile the corresponded resource
 // returns chan which can be used to obtain reconcile responcce and timings
-func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
-	var respChan chan *ReconcileResponce
-
-	if r.mainloopContext == nil {
-		return nil, fmt.Errorf("Unable to reconcile, MainLoop is not started")
-	}
-	if err := r.mainloopContext.Err(); err != nil {
-		return nil, fmt.Errorf("Unable to reconcile: %w", err)
-	}
-
-	rr, err := r.getKindStruct(kind)
-	if err != nil {
-		return nil, err
-	}
-	respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
-	rr.askToReconcile <- &reconcileRequest{
-		Key:      key,
-		RespChan: respChan,
-	}
-	return respChan, nil
+func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) { //revive:disable:confusing-naming
+	klog.Infof("RCL: user-Req to reconcile %s '%s'", kind, key)
+	return r.reconcile(kind, key)
 }
 
 // Lock -- lock watchers/reconcilers for the specifyed Kind type.

@@ -21,8 +21,8 @@ import (
 	apimTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	controllerRTclient "sigs.k8s.io/controller-runtime/pkg/client"
+	controllerRTreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -48,7 +48,7 @@ type kindWatcherData struct {
 	gvk            *schema.GroupVersionKind
 	kind           string
 	askToReconcile chan *reconcileRequest
-	reconciler     reconcile.Reconciler
+	reconciler     controllerRTreconcile.Reconciler
 	processedObjs  map[string]*reconcileStatus
 }
 
@@ -56,13 +56,13 @@ type fakeReconciler struct {
 	sync.Mutex
 	scheme          *runtime.Scheme
 	kinds           map[string]*kindWatcherData
-	client          client.WithWatch
+	client          controllerRTclient.WithWatch
 	mainloopContext context.Context //nolint: containedctx
 	watchersWG      sync.WaitGroup
 	userTasksWG     sync.WaitGroup
 }
 
-func (r *fakeReconciler) GetClient() client.WithWatch {
+func (r *fakeReconciler) GetClient() controllerRTclient.WithWatch {
 	return r.client
 }
 
@@ -98,10 +98,10 @@ func (r *kindWatcherData) DeleteObj(key string) error {
 	return nil
 }
 
-func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj client.Object) *ReconcileResponce {
+func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj controllerRTclient.Object) *ReconcileResponce {
 	var (
 		err       error
-		res       reconcile.Result
+		res       controllerRTreconcile.Result
 		startTime time.Time
 		endTime   time.Time
 	)
@@ -128,7 +128,7 @@ func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj c
 	objRec.nName = nName
 
 	ensureRequiredMetaFields(ctx, r.client, obj)
-	res, err = kindWatcherData.reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nName})
+	res, err = kindWatcherData.reconciler.Reconcile(ctx, controllerRTreconcile.Request{NamespacedName: nName})
 	endTime = time.Now().UTC()
 
 	rResponse := ReconcileResponce{
@@ -166,8 +166,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 				break
 			}
 
-			// kindWD.Lock()
-			klog.Infof("RCL: %s '%s' Req to reconcile", kind, req.Key)
+			klog.Infof("RCL: %s '%s' going to reconcile", kind, req.Key)
 			nName := utils.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kindWD.gvk)
@@ -178,22 +177,21 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			} else {
 				// object fetched, call Reconcile(...)
 				rv = r.doReconcile(ctx, kind, obj)
-				rvString := fmt.Sprintf("RCL: %s '%s' Reconcile result: %s", kind, req.Key, rv)
+				msg := fmt.Sprintf("RCL: %s '%s' Reconcile result: %s", kind, req.Key, rv)
 				if rv.Err != nil {
-					klog.Errorf(rvString)
+					klog.Errorf(msg)
 				} else {
-					klog.Infof(rvString)
+					klog.Infof(msg)
 				}
 			}
 			req.RespChan <- rv  // should
 			close(req.RespChan) // be together
-			// kindWD.Unlock()     // together
 		case in := <-watcher.ResultChan():
 			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {
 				panic("Wrong object passed from watcher")
 			}
-			k8sObj, ok := in.Object.(client.Object)
+			k8sObj, ok := in.Object.(controllerRTclient.Object)
 			if !ok {
 				panic("Wrong object passed from watcher")
 			}
@@ -201,7 +199,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			switch in.Type {
 			case watch.Deleted:
 				if len(k8sObj.GetFinalizers()) == 0 {
-					// no finalizers, object will be deleted by fake client
+					// no finalizers, object will be deleted by fake controllerRTclient
 					// fakeReconciler should to forget about deleted object
 					kwd, err := r.getKindStruct(nName.String())
 					if err == nil {
@@ -224,13 +222,13 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 					} else {
 						klog.Infof("RCL: DeletionTimestamp of [%s] '%s' is already found, the object was planned to delete earlier, try to reconcile.", kindWD.kind, nName)
 						// Reconcile(...) should be initiated explicitly
-						if _, err := r.Reconcile(kind, nName.String()); err != nil {
+						if _, err := r.reconcile(kind, nName.String()); err != nil {
 							klog.Errorf("RCL error: %s", err)
 						}
 					}
 				}
 			case watch.Added, watch.Modified:
-				if _, err := r.Reconcile(kind, nName.String()); err != nil {
+				if _, err := r.reconcile(kind, nName.String()); err != nil {
 					klog.Errorf("RCL error: %s", err)
 				}
 			case watch.Bookmark, watch.Error:
@@ -240,6 +238,28 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			}
 		}
 	}
+}
+
+func (r *fakeReconciler) reconcile(kind, key string) (chan *ReconcileResponce, error) { //revive:disable:confusing-naming
+	var respChan chan *ReconcileResponce
+
+	if r.mainloopContext == nil {
+		return nil, fmt.Errorf("Unable to reconcile, MainLoop is not started")
+	}
+	if err := r.mainloopContext.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to reconcile: %w", err)
+	}
+
+	rr, err := r.getKindStruct(kind)
+	if err != nil {
+		return nil, err
+	}
+	respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
+	rr.askToReconcile <- &reconcileRequest{
+		Key:      key,
+		RespChan: respChan,
+	}
+	return respChan, nil
 }
 
 func (r *fakeReconciler) Run(ctx context.Context) error {
@@ -289,12 +309,12 @@ func (r *fakeReconciler) Wait() {
 	r.watchersWG.Wait()
 }
 
-func (r *fakeReconciler) AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error {
+func (r *fakeReconciler) AddControllerByType(m schema.ObjectKind, rcl controllerRTreconcile.Reconciler) error {
 	gvk := m.GroupVersionKind()
 	return r.AddController(&gvk, rcl)
 }
 
-func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error {
+func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl controllerRTreconcile.Reconciler) error {
 	kind := gvk.Kind
 	if k, ok := r.kinds[kind]; ok {
 		return fmt.Errorf("Kind '%s' already set up (%s)", kind, k.gvk.String())
@@ -310,7 +330,7 @@ func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl reconci
 	return nil
 }
 
-func NewFakeReconciler(fakeClient client.WithWatch, scheme *runtime.Scheme) FakeReconciler {
+func NewFakeReconciler(fakeClient controllerRTclient.WithWatch, scheme *runtime.Scheme) FakeReconciler {
 	rv := &fakeReconciler{
 		kinds:  map[string]*kindWatcherData{},
 		scheme: scheme,
@@ -323,7 +343,7 @@ func (r *ReconcileResponce) String() string {
 	return fmt.Sprintf("{Err:%v  Requeue:%v/%v  Took:%v}", r.Err, r.Result.Requeue, r.Result.RequeueAfter, r.StartFinishTime[1].Sub(r.StartFinishTime[0]))
 }
 
-func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj client.Object) {
+func ensureRequiredMetaFields(ctx context.Context, cl controllerRTclient.WithWatch, obj controllerRTclient.Object) {
 	const (
 		operation  = "replace"
 		pathPrefix = "/metadata/"
@@ -362,7 +382,7 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 		if err != nil {
 			klog.Errorf("RCL: unable to marshal Meta patch for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
 		}
-		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.JSONPatchType, buff)); err != nil {
+		if err := cl.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, buff)); err != nil {
 			klog.Errorf("RCL: unable to fix %v Meta fields for %s '%s/%s': %s", fields, objType, obj.GetNamespace(), obj.GetName(), err)
 		} else {
 			klog.Warningf("RCL: fixed Meta fields %v for %s '%s/%s'", fields, objType, obj.GetNamespace(), obj.GetName())

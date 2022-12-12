@@ -42,7 +42,6 @@ type reconcileStatus struct {
 	sync.Mutex
 	log     []ReconcileResponce
 	nName   apimTypes.NamespacedName
-	deleted bool
 	running bool
 }
 

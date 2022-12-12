@@ -135,9 +135,9 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			case !ok:
 				// object record may be absent if object really not found or if object found, but never reconciled
 				klog.Warningf("%s: never reconciled, continue waiting...", logKey)
-			case objRec.deleted:
-				respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
-				return
+			// case objRec.deleted:
+			// 	respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
+			// 	return
 			case !objRec.running && len(objRec.log) > 0:
 				// record about reconcile passed found
 				if reconciledAfter.IsZero() {

@@ -70,7 +70,7 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(PauseTime):
+			case <-time.After(GetPauseTime()):
 				continue
 			}
 		}
@@ -94,7 +94,7 @@ func (r *fakeReconciler) WaitToBeDeleted(ctx context.Context, kindName, key stri
 }
 
 // -----------------------------------------------------------------------------
-func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error) {
+func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan *ReconcileResponce, error) {
 	if r.mainloopContext == nil {
 		return nil, fmt.Errorf(k8t.FmtKW, MsgUnableToWatch, MsgMainLoopIsNotStarted)
 	}
@@ -108,7 +108,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 	if _, err := r.getKindStruct(kindName); err != nil {
 		return nil, err
 	}
-	respChan := make(chan error, 1) // buffered to push-and-close result
+	respChan := make(chan *ReconcileResponce, 1) // buffered to push-and-close result
 	logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 
 	r.userTasksWG.Add(1)
@@ -118,7 +118,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 		for {
 			kwd, err := r.getKindStruct(kindName)
 			if err != nil {
-				respChan <- err
+				respChan <- &ReconcileResponce{Err: err}
 			}
 
 			// check object exists
@@ -126,41 +126,38 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kwd.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
-				respChan <- fmt.Errorf("RCL: Unable to reconcile %s '%s': %w", kindName, key, err)
+				respChan <- &ReconcileResponce{Err: fmt.Errorf("RCL: Unable to reconcile %s '%s': %w", kindName, key, err)}
 				return
 			}
 
 			objRec, ok := kwd.GetObj(key)
 			switch {
 			case !ok:
-				// object record may be absent if object really not found or if object found, but never reconciled
+				// object record may be absent if object really not found or if object exists, but never reconciled
 				klog.Warningf("%s: never reconciled, continue waiting...", logKey)
-			// case objRec.deleted:
-			// 	respChan <- fmt.Errorf("object %s '%s' marked to be deleted", kindName, key)
-			// 	return
-			case !objRec.running && len(objRec.log) > 0:
-				// record about reconcile passed found
-				if reconciledAfter.IsZero() {
-					respChan <- nil
-					return
+			case len(objRec.log) > 0:
+				// object reconcile log is exists and not emplty
+				lastLogRecord := objRec.log[len(objRec.log)-1]
+				if !reconciledAfter.IsZero() {
+					lastReconcileTs := lastLogRecord.StartFinishTime[0]
+					if lastReconcileTs.Before(reconciledAfter) {
+						klog.Warningf("%s: reconciled at '%s', earlier than '%s', continue waiting...", logKey, lastReconcileTs.UTC().Format(k8t.FmtRFC3339), reconciledAfter.UTC().Format(k8t.FmtRFC3339))
+						break // switch
+					}
 				}
-				lastReconcileTs := objRec.log[len(objRec.log)-1].StartFinishTime[0]
-				if lastReconcileTs.After(reconciledAfter) {
-					respChan <- nil
-					return
-				}
-				klog.Warningf("%s: reconciled at '%s', earlier than '%s', continue waiting...", logKey, lastReconcileTs.Format(k8t.FmtRFC3339), reconciledAfter.UTC().Format(k8t.FmtRFC3339))
+				respChan <- &lastLogRecord
+				return
 			}
 			select {
 			case <-r.mainloopContext.Done():
 				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
-				respChan <- r.mainloopContext.Err()
+				respChan <- &ReconcileResponce{Err: r.mainloopContext.Err()}
 				return
 			case <-ctx.Done():
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
-				respChan <- ctx.Err()
+				respChan <- &ReconcileResponce{Err: ctx.Err()}
 				return
-			case <-time.After(PauseTime):
+			case <-time.After(GetPauseTime()):
 				continue
 			}
 		}
@@ -172,12 +169,12 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error {
 	respCh, err := r.WatchToBeReconciled(ctx, kindName, key, reconciledAfter)
 	if err == nil {
-		receivedErr, ok := <-respCh
+		resp, ok := <-respCh
 		switch {
 		case !ok:
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
-		case receivedErr != nil:
-			err = receivedErr
+		case resp.Err != nil:
+			err = resp.Err
 		}
 	}
 	return err
@@ -298,7 +295,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(PauseTime):
+			case <-time.After(GetPauseTime()):
 				continue
 			}
 		}
@@ -379,7 +376,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(PauseTime):
+			case <-time.After(GetPauseTime()):
 				continue
 			}
 		}

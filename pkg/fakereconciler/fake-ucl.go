@@ -35,6 +35,7 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 		defer r.userTasksWG.Done()
 		defer close(respChan)
 		for {
+			klog.Warningf("%s...", logKey)
 			kwd, err := r.getKindStruct(kindName)
 			if err != nil {
 				respChan <- err
@@ -60,7 +61,6 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 				}
 			}
 
-			klog.Warningf("%s...", logKey)
 			select {
 			case <-r.mainloopContext.Done():
 				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())

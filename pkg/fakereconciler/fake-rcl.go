@@ -197,7 +197,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			if !ok {
 				panic("Wrong object passed from watcher")
 			}
-			klog.Infof("RCL: event %s  %s '%s'", in.Type, kindWD.kind, nName)
+			klog.Infof("RCL-ev: %s  %s '%s'", in.Type, kindWD.kind, nName)
 			switch in.Type {
 			case watch.Deleted:
 				if len(k8sObj.GetFinalizers()) == 0 {
@@ -208,16 +208,11 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 						if err := kwd.DeleteObj(nName.String()); err != nil {
 							klog.Errorf("RCL: Unable to delete object record: %s", err)
 						}
-						// objRec, ok := kwd.GetObj(nName.String())
-						// if !ok {
-						// 	klog.Errorf("RCL: Unable to mark object '%s' to delete", nName)
-						// } else {
-						// 	objRec.deleted = true
-						// }
 					}
 					klog.Infof("RCL: deletion of [%s] '%s' done, no finalizers.", kindWD.kind, nName)
 				} else {
 					// at least one finalizer found, DeletionTimestamp of the object should be set if absent
+					klog.Infof("RCL: deletion of [%s] '%s' done, there are %v finalizers found.", kindWD.kind, nName, k8sObj.GetFinalizers())
 					if k8sObj.GetDeletionTimestamp().IsZero() {
 						now := metav1.Now()
 						k8sObj.SetDeletionTimestamp(&now)
@@ -329,34 +324,45 @@ func (r *ReconcileResponce) String() string {
 }
 
 func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj client.Object) {
-	meta := map[string]any{}
-	objType := obj.GetObjectKind().GroupVersionKind().Kind
+	const (
+		operation  = "replace"
+		pathPrefix = "/metadata/"
+	)
+	type patchSection struct {
+		Op    string `json:"op"`
+		Path  string `json:"path"`
+		Value any    `json:"value"`
+	}
+	type patchSet []patchSection
 
-	if uid := obj.GetUID(); uid == "" {
-		meta["uid"] = uuid.NewString()
+	objType := obj.GetObjectKind().GroupVersionKind().Kind
+	patch := patchSet{}
+
+	if obj.GetUID() == "" {
+		patch = append(patch, patchSection{Path: "uid", Value: uuid.NewString()})
 	}
 	if ts := obj.GetCreationTimestamp(); ts.IsZero() {
-		meta["creationTimestamp"] = time.Now().Truncate(time.Second).UTC()
+		patch = append(patch, patchSection{Path: "creationTimestamp", Value: time.Now().UTC()})
 	}
-	if g := obj.GetGeneration(); g < 1 {
-		meta["generation"] = 1
+	if obj.GetGeneration() < 1 {
+		patch = append(patch, patchSection{Path: "generation", Value: int64(1)})
 	}
 	if g, err := strconv.Atoi(obj.GetResourceVersion()); err != nil || g < 1 {
-		meta["resourceVersion"] = fmt.Sprint(6000 + rand.Intn(100)) //nolint
+		patch = append(patch, patchSection{Path: "resourceVersion", Value: fmt.Sprint(6000 + rand.Intn(100))}) //nolint
 	}
-	if len(meta) > 0 {
+	if len(patch) > 0 {
 		fields := sort.StringSlice{}
-		for k := range meta {
-			fields = append(fields, k)
+		for k := range patch {
+			patch[k].Op = operation
+			fields = append(fields, patch[k].Path)
+			patch[k].Path = pathPrefix + patch[k].Path
 		}
 		fields.Sort()
-		buff, err := json.Marshal(struct {
-			M map[string]any `json:"metadata"`
-		}{M: meta})
+		buff, err := json.Marshal(patch)
 		if err != nil {
 			klog.Errorf("RCL: unable to marshal Meta patch for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
 		}
-		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.StrategicMergePatchType, buff)); err != nil {
+		if err := cl.Patch(ctx, obj, client.RawPatch(apimTypes.JSONPatchType, buff)); err != nil {
 			klog.Errorf("RCL: unable to fix %v Meta fields for %s '%s/%s': %s", fields, objType, obj.GetNamespace(), obj.GetName(), err)
 		} else {
 			klog.Warningf("RCL: fixed Meta fields %v for %s '%s/%s'", fields, objType, obj.GetNamespace(), obj.GetName())

@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	PauseTime           = 77 * time.Millisecond
+	BasePauseTime       = 127 // ms
 	ControlChanBuffSize = 255
 
 	MsgUnableToWatch        = "Unable to watch"
@@ -39,10 +39,8 @@ type reconcileRequest struct {
 }
 
 type reconcileStatus struct {
-	sync.Mutex
-	log     []ReconcileResponce
-	nName   apimTypes.NamespacedName
-	running bool
+	log   []ReconcileResponce
+	nName apimTypes.NamespacedName
 }
 
 type kindWatcherData struct {
@@ -118,42 +116,29 @@ func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj c
 		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
 
-	r.Lock()
-	objRec, ok := kindWatcherData.processedObjs[nName.String()]
+	objRec, ok := kindWatcherData.GetObj(nName.String())
 	if !ok {
-		kindWatcherData.processedObjs[nName.String()] = &reconcileStatus{}
-		objRec = kindWatcherData.processedObjs[nName.String()]
+		kindWatcherData.Lock()
+		objRec = &reconcileStatus{}
+		kindWatcherData.processedObjs[nName.String()] = objRec
+		kindWatcherData.Unlock()
 	}
-	r.Unlock()
 
 	startTime = time.Now().UTC()
-	objRec.Lock()
 	objRec.nName = nName
-	objRec.log = append(objRec.log, ReconcileResponce{
-		StartFinishTime: k8t.TimeInterval{startTime, time.Time{}},
-	})
-	objRec.running = true
-	objRec.Unlock()
-
-	defer func() {
-		objRec.Lock()
-		idx := len(objRec.log) - 1
-		objRec.log[idx].StartFinishTime[1] = endTime
-		objRec.log[idx].Result = res
-		objRec.log[idx].Err = err
-		objRec.running = false
-		objRec.Unlock()
-	}()
 
 	ensureRequiredMetaFields(ctx, r.client, obj)
-
 	res, err = kindWatcherData.reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nName})
 	endTime = time.Now().UTC()
-	return &ReconcileResponce{
+
+	rResponse := ReconcileResponce{
 		Result:          res,
 		Err:             err,
 		StartFinishTime: k8t.TimeInterval{startTime, endTime},
 	}
+	objRec.log = append(objRec.log, rResponse)
+
+	return &rResponse
 }
 
 // Watch C/R/M/D events from fakeClient or user request.
@@ -181,7 +166,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 				break
 			}
 
-			kindWD.Lock()
+			// kindWD.Lock()
 			klog.Infof("RCL: %s '%s' Req to reconcile", kind, req.Key)
 			nName := utils.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
@@ -201,8 +186,8 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 				}
 			}
 			req.RespChan <- rv  // should
-			close(req.RespChan) // be
-			kindWD.Unlock()     // together
+			close(req.RespChan) // be together
+			// kindWD.Unlock()     // together
 		case in := <-watcher.ResultChan():
 			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {
@@ -377,4 +362,8 @@ func ensureRequiredMetaFields(ctx context.Context, cl client.WithWatch, obj clie
 			klog.Warningf("RCL: fixed Meta fields %v for %s '%s/%s'", fields, objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
+}
+
+func GetPauseTime() time.Duration {
+	return time.Duration(BasePauseTime+rand.Intn(33)) * time.Millisecond //nolint
 }

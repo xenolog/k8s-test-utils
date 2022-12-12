@@ -65,7 +65,7 @@ type FakeReconciler interface {
 	// Does not block current gorutine,  error chan returned to obtain result if need
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	// Throw error if kind not found, use Wait/WatchToBeCreated(...) to check it.
-	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan error, error)
+	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan *ReconcileResponce, error)
 
 	// WaitToFieldSatisfyRE -- block gorutine while corresponded CRD field will be satisfy to the given regexp.
 	//

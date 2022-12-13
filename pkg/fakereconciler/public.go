@@ -7,8 +7,8 @@ import (
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	controllerRTclient "sigs.k8s.io/controller-runtime/pkg/client"
+	controllerRTreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type FakeReconciler interface {
@@ -119,16 +119,16 @@ type FakeReconciler interface {
 	WatchToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) (chan error, error)
 
 	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)
-	AddController(gvk *schema.GroupVersionKind, rcl reconcile.Reconciler) error
-	AddControllerByType(m schema.ObjectKind, rcl reconcile.Reconciler) error
+	AddController(gvk *schema.GroupVersionKind, rcl controllerRTreconcile.Reconciler) error
+	AddControllerByType(m schema.ObjectKind, rcl controllerRTreconcile.Reconciler) error
 
-	GetClient() client.WithWatch
+	GetClient() controllerRTclient.WithWatch
 	GetScheme() *runtime.Scheme
 }
 
 type ReconcileResponce struct {
 	Err             error
-	Result          reconcile.Result
+	Result          controllerRTreconcile.Result
 	StartFinishTime k8t.TimeInterval
 }
 

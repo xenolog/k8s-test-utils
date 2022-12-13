@@ -28,39 +28,43 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 		return nil, err
 	}
 	respChan := make(chan error, 1) // buffered to push-and-close result
-	logKey := fmt.Sprintf("RCL: WaitingToBeDeleted [%s] '%s'", kindName, key)
 
 	r.userTasksWG.Add(1)
-	go func(kindName, key string, rvd bool) {
+	go func(kindName, key string, respChan chan error, rvd bool) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		for {
-			kwd, err := r.getKindStruct(kindName)
-			if err != nil {
-				respChan <- err
-			}
+		logKey := fmt.Sprintf("RCL: WaitingToBeDeleted [%s] '%s'", kindName, key)
 
+		kwd, err := r.getKindStruct(kindName)
+		if err != nil {
+			respChan <- err
+		}
+		nName := utils.KeyToNamespacedName(key)
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(*kwd.gvk)
+		for {
 			// check object exists
-			nName := utils.KeyToNamespacedName(key)
-			obj := &unstructured.Unstructured{}
-			obj.SetGroupVersionKind(*kwd.gvk)
 			err = r.client.Get(ctx, nName, obj)
 			switch {
 			case apimErrors.IsNotFound(err):
+				klog.Warningf("%s, object removed successfully", logKey)
 				respChan <- nil
 				return
 			case err != nil:
 				respChan <- err
 				return
+			case obj.GetDeletionTimestamp().IsZero():
+				klog.Warningf("%s...", logKey)
 			default:
-				if !rvd && !obj.GetDeletionTimestamp().IsZero() {
-					// deletionTimestamp is set and it is enough by user criteria
+				dts := obj.GetDeletionTimestamp().UTC()
+				klog.Warningf("%s, deletionTimestamp is '%s'", logKey, dts.Format(k8t.FmtRFC3339))
+				if !rvd {
+					klog.Warningf("%s, it's enough", logKey)
 					respChan <- nil
 					return
 				}
 			}
 
-			klog.Warningf("%s...", logKey)
 			select {
 			case <-r.mainloopContext.Done():
 				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
@@ -74,7 +78,7 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 				continue
 			}
 		}
-	}(kindName, key, requireValidDeletion)
+	}(kindName, key, respChan, requireValidDeletion)
 
 	return respChan, nil
 }
@@ -109,12 +113,12 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 		return nil, err
 	}
 	respChan := make(chan *ReconcileResponce, 1) // buffered to push-and-close result
-	logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 
 	r.userTasksWG.Add(1)
-	go func(kindName, key string) {
+	go func(kindName, key string, respChan chan *ReconcileResponce) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
+		logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
 		for {
 			kwd, err := r.getKindStruct(kindName)
 			if err != nil {
@@ -161,7 +165,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				continue
 			}
 		}
-	}(kindName, key)
+	}(kindName, key, respChan)
 
 	return respChan, nil
 }
@@ -183,9 +187,10 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 //-----------------------------------------------------------------------------
 
 func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) { //revive:disable:flag-parameter
-	logKey := fmt.Sprintf("RCL: WaitingToCreate [%s] '%s'", kind, key)
+	logKey := fmt.Sprintf("RCL: WaitingToBeCreated [%s] '%s'", kind, key)
+	reallyIsReconciled := isReconciled
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in any) bool {
-		if !isReconciled {
+		if !reallyIsReconciled {
 			return true
 		}
 		status, ok := in.(map[string]any)
@@ -202,6 +207,8 @@ func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, 
 			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
+		default:
+			klog.Warningf("RCL: WaitingToBeCreated [%s] '%s', created successfully", kind, key)
 		}
 	}
 	return err
@@ -239,7 +246,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 
 var fieldPathSplitRE = regexp.MustCompile(`[.:/]`)
 
-func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind, key, fieldpath string, callback func(any) bool) (chan error, error) {
+func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kindName, key, fieldpath string, callback func(any) bool) (chan error, error) {
 	if r.mainloopContext == nil {
 		return nil, fmt.Errorf(k8t.FmtKW, MsgUnableToWatch, MsgMainLoopIsNotStarted)
 	}
@@ -250,25 +257,26 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 		return nil, fmt.Errorf(k8t.FmtErrKW, MsgUnableToWatch, err)
 	}
 
-	rr, err := r.getKindStruct(kind)
+	rr, err := r.getKindStruct(kindName)
 	if err != nil {
 		return nil, err
 	}
 	respChan := make(chan error, 1) // buffered to push-and-close result
-	nName := utils.KeyToNamespacedName(key)
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(*rr.gvk)
-	pathSlice := fieldPathSplitRE.Split(fieldpath, -1)
 
 	r.userTasksWG.Add(1)
-	go func() {
+	go func(kind, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
+		nName := utils.KeyToNamespacedName(key)
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(*rr.gvk)
+		pathSlice := fieldPathSplitRE.Split(fp, -1)
 		for {
+			klog.Warningf("%s...", logKey)
 			err := r.client.Get(ctx, nName, obj)
 			switch {
 			case apimErrors.IsNotFound(err):
-				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to create...", logKey, kind, key)
+				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to be created...", logKey, kind, key)
 			case err != nil:
 				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
 			default:
@@ -281,9 +289,9 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 					respChan <- nil
 					return
 				case ok:
-					klog.Warningf("%s: field '%s' is not satisfy to given conditions, continue waiting...", logKey, fieldpath)
+					klog.Warningf("%s: field '%s' is not satisfy to given conditions, continue waiting...", logKey, fp)
 				default:
-					klog.Warningf("%s: field '%s' is not found, continue waiting...", logKey, fieldpath)
+					klog.Warningf("%s: field '%s' is not found, continue waiting...", logKey, fp)
 				}
 			}
 			select {
@@ -299,7 +307,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 				continue
 			}
 		}
-	}()
+	}(kindName, key, fieldpath, logKey, respChan)
 
 	return respChan, err
 }
@@ -321,7 +329,7 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 
 // -----------------------------------------------------------------------------
 
-func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kind, key, fieldpath string) (chan error, error) {
+func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kindName, key, fieldpath string) (chan error, error) {
 	if r.mainloopContext == nil {
 		return nil, fmt.Errorf(k8t.FmtKW, MsgUnableToWatch, MsgMainLoopIsNotStarted)
 	}
@@ -332,20 +340,20 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 		return nil, fmt.Errorf(k8t.FmtErrKW, MsgUnableToWatch, err)
 	}
 
-	rr, err := r.getKindStruct(kind)
+	rr, err := r.getKindStruct(kindName)
 	if err != nil {
 		return nil, err
 	}
 	respChan := make(chan error, 1) // buffered to push-and-close result
-	nName := utils.KeyToNamespacedName(key)
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(*rr.gvk)
-	pathSlice := fieldPathSplitRE.Split(fieldpath, -1)
 
 	r.userTasksWG.Add(1)
-	go func() {
+	go func(_, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
+		nName := utils.KeyToNamespacedName(key)
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(*rr.gvk)
+		pathSlice := fieldPathSplitRE.Split(fp, -1)
 		for {
 			err := r.client.Get(ctx, nName, obj)
 			switch {
@@ -364,7 +372,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 					respChan <- nil
 					return
 				default:
-					klog.Warningf("%s: field '%s' is found, continue waiting...", logKey, fieldpath)
+					klog.Warningf("%s: field '%s' is found, continue waiting...", logKey, fp)
 				}
 			}
 			select {
@@ -380,7 +388,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 				continue
 			}
 		}
-	}()
+	}(kindName, key, fieldpath, logKey, respChan)
 
 	return respChan, err
 }
@@ -405,25 +413,8 @@ func (r *fakeReconciler) WaitToFieldBeNotFound(ctx context.Context, kind, key, f
 // Reconcile -- invoke to reconcile the corresponded resource
 // returns chan which can be used to obtain reconcile responcce and timings
 func (r *fakeReconciler) Reconcile(kind, key string) (chan *ReconcileResponce, error) {
-	var respChan chan *ReconcileResponce
-
-	if r.mainloopContext == nil {
-		return nil, fmt.Errorf("Unable to reconcile, MainLoop is not started")
-	}
-	if err := r.mainloopContext.Err(); err != nil {
-		return nil, fmt.Errorf("Unable to reconcile: %w", err)
-	}
-
-	rr, err := r.getKindStruct(kind)
-	if err != nil {
-		return nil, err
-	}
-	respChan = make(chan *ReconcileResponce, 1) // buffered to push-and-close result
-	rr.askToReconcile <- &reconcileRequest{
-		Key:      key,
-		RespChan: respChan,
-	}
-	return respChan, nil
+	klog.Infof("RCL: user-Req to reconcile %s '%s'", kind, key)
+	return r.reconcile(kind, key)
 }
 
 // Lock -- lock watchers/reconcilers for the specifyed Kind type.

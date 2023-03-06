@@ -7,8 +7,7 @@ import (
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
-	"github.com/xenolog/k8s-utils/pkg/utils"
-	apimErrors "k8s.io/apimachinery/pkg/api/errors"
+	k8sutil "github.com/xenolog/k8s-utils/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog"
 )
@@ -39,14 +38,14 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 		if err != nil {
 			respChan <- err
 		}
-		nName := utils.KeyToNamespacedName(key)
+		nName := k8sutil.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*kwd.gvk)
 		for {
 			// check object exists
 			err = r.client.Get(ctx, nName, obj)
 			switch {
-			case apimErrors.IsNotFound(err):
+			case k8sutil.IsNotFound(err):
 				klog.Warningf("%s, object removed successfully", logKey)
 				respChan <- nil
 				return
@@ -126,7 +125,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 
 			// check object exists
-			nName := utils.KeyToNamespacedName(key)
+			nName := k8sutil.KeyToNamespacedName(key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kwd.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
@@ -267,7 +266,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	go func(kind, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		nName := utils.KeyToNamespacedName(key)
+		nName := k8sutil.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*rr.gvk)
 		pathSlice := fieldPathSplitRE.Split(fp, -1)
@@ -275,7 +274,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 			klog.Warningf("%s...", logKey)
 			err := r.client.Get(ctx, nName, obj)
 			switch {
-			case apimErrors.IsNotFound(err):
+			case k8sutil.IsNotFound(err):
 				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to be created...", logKey, kind, key)
 			case err != nil:
 				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
@@ -350,7 +349,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 	go func(_, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		nName := utils.KeyToNamespacedName(key)
+		nName := k8sutil.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*rr.gvk)
 		pathSlice := fieldPathSplitRE.Split(fp, -1)

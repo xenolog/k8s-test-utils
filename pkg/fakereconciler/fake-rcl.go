@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	"github.com/xenolog/k8s-utils/pkg/utils"
-	apimErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -214,7 +213,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 					if k8sObj.GetDeletionTimestamp().IsZero() {
 						now := metav1.Now()
 						k8sObj.SetDeletionTimestamp(&now)
-						if err := r.client.Update(ctx, k8sObj); err != nil && !apimErrors.IsNotFound(err) {
+						if err := r.client.Update(ctx, k8sObj); err != nil && !utils.IsNotFound(err) {
 							klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
 						}
 						// MODIFY event will initiate Reconcile automatically

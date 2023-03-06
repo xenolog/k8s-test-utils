@@ -3,6 +3,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -118,4 +119,13 @@ exLoop:
 		}
 	}
 	return strings.TrimSuffix(rv.String(), "\n")
+}
+
+func RecursiveUnwrap(err error) (rv error) {
+	tmp := err
+	for tmp != nil {
+		rv = tmp
+		tmp = errors.Unwrap(tmp)
+	}
+	return rv
 }

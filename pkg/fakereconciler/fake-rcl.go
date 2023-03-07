@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apimTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/klog"
+	klog "k8s.io/klog/v2"
 	controllerRTclient "sigs.k8s.io/controller-runtime/pkg/client"
 	controllerRTreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )

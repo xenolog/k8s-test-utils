@@ -118,6 +118,12 @@ type FakeReconciler interface {
 	// otherwise valid deletionTimestamp is enough
 	WatchToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) (chan error, error)
 
+	// WaitToBeFinished -- block current goroutine and wait all channels reports about finish or error.
+	// If error received, deadline happens or context cancelled error will be returned
+	//
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	WaitToBeFinished(ctx context.Context, chanList []chan error) error
+
 	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl controllerRTreconcile.Reconciler) error
 	AddControllerByType(m schema.ObjectKind, rcl controllerRTreconcile.Reconciler) error

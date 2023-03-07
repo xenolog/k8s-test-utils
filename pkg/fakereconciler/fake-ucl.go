@@ -328,6 +328,46 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 
 // -----------------------------------------------------------------------------
 
+func (r *fakeReconciler) WaitToBeFinished(ctx context.Context, chanList []chan error) error { //nolint: contextcheck
+	if r.mainloopContext == nil {
+		return fmt.Errorf(k8t.FmtKW, MsgUnableToWatch, MsgMainLoopIsNotStarted)
+	}
+	if ctx == nil {
+		ctx = r.mainloopContext
+	}
+
+exLoop:
+	for len(chanList) != 0 {
+		for i := range chanList {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("%w, %d left", ctx.Err(), len(chanList))
+			case err, ok := <-chanList[i]:
+				switch {
+				case !ok:
+					return fmt.Errorf("channel was unexpectedly closed by sender")
+				case err != nil:
+					return err
+				default:
+					chanList = append(chanList[:i], chanList[i+1:]...)
+					continue exLoop
+				}
+			default:
+				continue // non-blocking select
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w, %d left", ctx.Err(), len(chanList))
+		case <-time.After(GetPauseTime()):
+			continue
+		}
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+
 func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kindName, key, fieldpath string) (chan error, error) {
 	if r.mainloopContext == nil {
 		return nil, fmt.Errorf(k8t.FmtKW, MsgUnableToWatch, MsgMainLoopIsNotStarted)

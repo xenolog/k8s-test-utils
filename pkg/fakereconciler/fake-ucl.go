@@ -9,7 +9,7 @@ import (
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	k8sutil "github.com/xenolog/k8s-utils/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/klog"
+	klog "k8s.io/klog/v2"
 )
 
 func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) (chan error, error) {

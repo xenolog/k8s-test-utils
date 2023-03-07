@@ -12,24 +12,36 @@ import (
 )
 
 func PublishKlogOutputIfFailed(t *testing.T) func() {
-	klogv2.InitFlags(nil)
+	// klogv2.InitFlags(nil)
 
-	flagSet := flag.NewFlagSet("", flag.PanicOnError)
-	klogv1.CopyStandardLogTo("INFO")
-	klogv1.InitFlags(flagSet) // start a trick to permit use .SetOutput(...) in the k8s.io/klog
-	if err := flagSet.Set("logtostderr", "false"); err != nil {
+	klogv2Flags := flag.NewFlagSet("", flag.PanicOnError)
+	klogv2.CopyStandardLogTo("INFO")
+	klogv2.InitFlags(klogv2Flags) // start a trick to permit use .SetOutput(...) in the k8s.io/klog
+	if err := klogv2Flags.Set("logtostderr", "false"); err != nil {
 		panic(err)
 	}
-	if err := flagSet.Set("alsologtostderr", "false"); err != nil {
+	if err := klogv2Flags.Set("alsologtostderr", "false"); err != nil {
 		panic(err)
 	}
-	if err := flagSet.Set("stderrthreshold", "4"); err != nil {
+	if err := klogv2Flags.Set("stderrthreshold", "4"); err != nil {
 		panic(err)
 	}
 	flag.Parse() // it was official trick :)
 	logBuff := bytes.Buffer{}
-	klogv1.SetOutput(&logBuff)
 	klogv2.SetOutput(&logBuff)
+
+	klogv1Flags := flag.FlagSet{}
+	klogv1.InitFlags(&klogv1Flags)
+	if err := klogv1Flags.Set("logtostderr", "false"); err != nil { // By default klog v1 logs to stderr, switch that off
+		panic(err)
+	}
+	if err := klogv1Flags.Set("stderrthreshold", "FATAL"); err != nil { // stderrthreshold defaults to ERROR, use this if you
+		panic(err)
+	}
+	if err := klogv1Flags.Set("stderrthreshold", "4"); err != nil {
+		panic(err)
+	}
+	klogv1.SetOutput(&logBuff)
 
 	return func() {
 		klogv1.Flush()
@@ -38,7 +50,7 @@ func PublishKlogOutputIfFailed(t *testing.T) func() {
 			t.Logf("Operator log:\n%s\n", strings.Join(StringNoDuplicateLines(&logBuff), "\n"))
 		}
 		// restore non-intersepted logging
-		if err := flagSet.Set("logtostderr", "true"); err != nil {
+		if err := klogv2Flags.Set("logtostderr", "true"); err != nil {
 			panic(err)
 		}
 		flag.Parse()

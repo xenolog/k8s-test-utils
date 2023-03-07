@@ -7,13 +7,16 @@ import (
 	"testing"
 
 	"github.com/k0kubun/pp"
-	"k8s.io/klog"
+	klogv1 "k8s.io/klog"
+	klogv2 "k8s.io/klog/v2"
 )
 
 func PublishKlogOutputIfFailed(t *testing.T) func() {
+	klogv2.InitFlags(nil)
+
 	flagSet := flag.NewFlagSet("", flag.PanicOnError)
-	klog.CopyStandardLogTo("INFO")
-	klog.InitFlags(flagSet) // start a trick to permit use .SetOutput(...) in the k8s.io/klog
+	klogv1.CopyStandardLogTo("INFO")
+	klogv1.InitFlags(flagSet) // start a trick to permit use .SetOutput(...) in the k8s.io/klog
 	if err := flagSet.Set("logtostderr", "false"); err != nil {
 		panic(err)
 	}
@@ -25,10 +28,12 @@ func PublishKlogOutputIfFailed(t *testing.T) func() {
 	}
 	flag.Parse() // it was official trick :)
 	logBuff := bytes.Buffer{}
-	klog.SetOutput(&logBuff)
+	klogv1.SetOutput(&logBuff)
+	klogv2.SetOutput(&logBuff)
 
 	return func() {
-		klog.Flush()
+		klogv1.Flush()
+		klogv2.Flush()
 		if t.Failed() {
 			t.Logf("Operator log:\n%s\n", strings.Join(StringNoDuplicateLines(&logBuff), "\n"))
 		}
@@ -37,7 +42,8 @@ func PublishKlogOutputIfFailed(t *testing.T) func() {
 			panic(err)
 		}
 		flag.Parse()
-		klog.SetOutput(nil)
+		klogv1.SetOutput(nil)
+		klogv2.SetOutput(nil)
 	}
 }
 

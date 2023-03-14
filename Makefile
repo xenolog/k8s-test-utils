@@ -29,7 +29,7 @@ env-info:
 	id
 	@echo
 	@echo PWD=$(shell pwd)
-	@env | grep -i GO
+	go env
 	@echo
 	@go version
 

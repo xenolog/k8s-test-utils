@@ -128,6 +128,7 @@ type FakeReconciler interface {
 	AddController(gvk *schema.GroupVersionKind, rcl controllerRTreconcile.Reconciler) error
 	AddControllerByType(m schema.ObjectKind, rcl controllerRTreconcile.Reconciler) error
 
+	GetContext() context.Context
 	GetClient() controllerRTclient.WithWatch
 	GetScheme() *runtime.Scheme
 }

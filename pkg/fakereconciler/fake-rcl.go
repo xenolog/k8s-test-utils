@@ -61,6 +61,10 @@ type fakeReconciler struct {
 	userTasksWG     sync.WaitGroup
 }
 
+func (r *fakeReconciler) GetContext() context.Context {
+	return r.mainloopContext
+}
+
 func (r *fakeReconciler) GetClient() controllerRTclient.WithWatch {
 	return r.client
 }

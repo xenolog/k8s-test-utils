@@ -6,6 +6,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/k0kubun/pp v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.8.2
+	gomodules.xyz/jsonpatch/v2 v2.2.0
 	k8s.io/apimachinery v0.25.0
 	k8s.io/client-go v0.25.0
 	k8s.io/klog v1.0.0

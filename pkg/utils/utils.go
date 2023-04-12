@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 )
@@ -128,4 +130,12 @@ func RecursiveUnwrap(err error) (rv error) {
 		tmp = errors.Unwrap(tmp)
 	}
 	return rv
+}
+
+func UnstructuredObj(gvk *schema.GroupVersionKind, nName types.NamespacedName) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(*gvk)
+	obj.SetNamespace(nName.Namespace)
+	obj.SetName(nName.Name)
+	return obj
 }

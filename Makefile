@@ -8,6 +8,9 @@ VERSION ?= v$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_BUILD)-$(VERSION_TSTAMP)
 GOPATH ?=$(shell go env GOPATH)
 GOPROXY ?= proxy.golang.org
 #GOPRIVATE ?= github.com/Mirantis/*,gerrit.mcp.mirantis.com/*
+export CGO_ENABLED ?= 0
+export GOPROXY
+export GOPRIVATE
 
 GOLANGCILINT_VER ?= 1.52.2
 GOLANGCILINT_BINARY ?= $(GOPATH)/bin/golangci-lint
@@ -16,10 +19,13 @@ MIN_GOLANGCILINT_VER = $(shell echo "$(GOLANGCILINT_VER)" | awk -F. '{print $$1"
 ACT_GOLANGCILINT_VER = $(shell VER=$$(golangci-lint version --color=never 2>&1) || VER="version 0.0" ; echo $$VER | sed -nEe 's/.*version v?([0-9]+\.[0-9]+).*/\1/p')
 NEED_INSTALL_GOLANGCILINT = $(shell echo '$(ACT_GOLANGCILINT_VER)<$(MIN_GOLANGCILINT_VER)' | bc )
 
+GOTEST_TIMEOUT ?= 1m
+GOLANGCILINT_TIMEOUT ?= 10m
+
 BUILD_FLAGS_DD ?= $(if $(filter $(shell go env GOHOSTOS),darwin),,-d)
 LDD ?= $(if $(filter $(shell go env GOHOSTOS),darwin),otool -L -D,ldd)
 GO_BUILD_ENV ?= CGO_ENABLED=0 GOPROXY=$(GOPROXY) GOPRIVATE=$(GOPRIVATE)
-BUILD_FLAGS ?= -ldflags="$(BUILD_FLAGS_DD) -s -w -X $(MODPATH)/pkg/version.version=$(VERSION)" -tags netgo -installsuffix netgo
+BUILD_FLAGS ?= -ldflags="$(BUILD_FLAGS_DD) -s -w -X $(MODPATH)/pkg/version.version=$(VERSION)" -tags netgo,urfave_cli_no_docs -installsuffix netgo
 
 MODPATH ?= $(shell head -n1 go.mod | grep module | awk '{print $$2}')
 
@@ -39,7 +45,9 @@ install-generation-tools:
 
 .PHONY: download-deps
 download-deps:
-	$(GO_BUILD_ENV) go mod download -x
+	go env
+	go mod download -x
+
 
 .PHONY: version
 version:
@@ -63,7 +71,7 @@ golangci:
 .PHONY: test
 test: env-info $(GOLANGCILINT_CHECK)
 	@gofmt -d  $(shell find ./pkg ./cmd -name '*.go')
-	$(GO_BUILD_ENV) go vet $(BUILD_FLAGS) ./...
+	go vet $(BUILD_FLAGS) ./...
 	@golangci-lint version --color=never
-	$(GO_BUILD_ENV) golangci-lint run --timeout 10m
-	$(GO_BUILD_ENV) go test $(BUILD_FLAGS) ./...
+	golangci-lint run --sort-results  --timeout $(GOLANGCILINT_TIMEOUT)
+	go test $(BUILD_FLAGS) --timeout=$(GOTEST_TIMEOUT) ./...

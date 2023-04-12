@@ -1,6 +1,6 @@
 ---
 run:
-  go: "1.19"
+  go: "1.20"
   timeout: 5m
   skip-files:
     - "pkg/client/internalclientset/.*"
@@ -15,26 +15,20 @@ issues:
     - '^shadow:\s+declaration\s+of\s+"err"\s+shadows\s+declaration\s+at\s+line'
     - '^shadow:\s+declaration\s+of\s+"ok"\s+shadows\s+declaration\s+at\s+line'
     - '^shadow:\s+declaration\s+of\s+"ctx"\s+shadows\s+declaration\s+at\s+line'
+    - '^shadow:\s+declaration\s+of\s+"tt"\s+shadows\s+declaration\s+at\s+line'
   exclude-rules:
-    # # allow dot-importing ginkgo and gomega
-    # - linters: [golint, stylecheck]
-    #   source: '\. "github\.com/onsi/(gomega|ginkgo)"'
-    #   text: "should not use dot imports"
     - linters: [stylecheck]
       text: "ST1003:"
-    # ignore capitalised error strings for now
-    - linters: [stylecheck]
+    - linters: [stylecheck] # ignore capitalised error strings for now
       text: "ST1005:"
+    - linters: [misspell]
+      text: "gratuitious" # netplan gratuitious-arp
     - linters: [golint, revive]
       text: "error strings should not be capitalized or end with punctuation or a newline"
     - linters: [golint, revive]
       text: "context-keys-type: should not use basic type string as key in context.WithValue"
     - linters: [staticcheck]
       text: "SA1029"
-    - linters: [stylecheck]
-      text: "ST1016:"
-    - linters: [stylecheck]
-      text: "ST1017:"
     - linters: [gocritic]
       text: "commentFormatting: put a space between `//` and comment text"
     - linters: [gocritic]
@@ -42,8 +36,6 @@ issues:
       source: '\)\s+String\(\)\s+\(rv\s+string\)\s+\{' # Stringer interface
     - linters: [staticcheck]
       text: "pkg/client/fake"
-    - linters: [misspell]
-      text: "gratuitious" # netplan gratuitious-arp
     - linters: [revive]
       text: "var-naming:"
     - linters: [revive]
@@ -64,6 +56,12 @@ issues:
       path: _test\.go
     - linters: [forcetypeassert]
       path: _test\.go
+    - linters: [goconst]
+      text: '^string\s+`(OK|ERR|simple)`'
+    - linters: [nolintlint] # workaround to VScode + gopls formating features
+      text: '^directive\s+`//\s+nolint:\s+[A-Za-z0-9]+`\s+should\s+be\s+written\s+without\s+leading\s+space'
+    - linters: [musttag]
+      source: "type GroupVersionKind struct {"
 linters:
   enable-all: true
   disable:
@@ -124,6 +122,9 @@ linters-settings:
     # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
     # Default: ["*"]
     checks: ["all"]
+  funlen:
+    lines: 512
+    statements: 256
   gosec:
     exclude-generated: true
     severity: high
@@ -146,9 +147,13 @@ linters-settings:
     rules:
       - name: cyclomatic
         disabled: true
+      - name: comment-spacings
+        disabled: true
       - name: line-length-limit
         arguments: [240]
       - name: file-header
+        disabled: true
+      - name: flag-parameter
         disabled: true
       - name: max-public-structs
         disabled: true
@@ -161,6 +166,8 @@ linters-settings:
       - name: argument-limit
         disabled: true
       - name: banned-characters
+        disabled: true
+      - name: nested-structs
         disabled: true
       - name: comment-spacings
         disabled: true

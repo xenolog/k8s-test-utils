@@ -80,6 +80,7 @@ linters:
     - godox
     - goerr113
     - golint # is deprecated (since v1.41.0) due to: The repository of the linter has been archived by the owner.  Replaced by revive.
+    - gomnd
     - ifshort # is deprecated (since v1.48.0) due to: The repository of the linter has been deprecated by the owner.
     - interfacebloat
     - interfacer # is deprecated (since v1.38.0) due to: The repository of the linter has been archived by the owner.
@@ -102,106 +103,17 @@ linters-settings:
   goimports:
     local-prefixes: github.com/Mirantis/kaas-ipam,gerrit.mcp.mirantis.com/kaas/core,github.com/Mirantis/lcm,github.com/metal3-io/baremetal-operator,sigs.k8s.io/cluster-api-provider-openstack
   gocritic:
-    enabled-checks:
-      - appendAssign
-      - appendCombine
-      - argOrder
-      - assignOp
-      - badCall
-      - badCond
-      - badLock
-      - badRegexp
-      - boolExprSimplify
-      - builtinShadow
-      - builtinShadowDecl
-      - captLocal
-      - caseOrder
-      - codegenComment
-      - commentedOutImport
-      - defaultCaseOrder
-      - deferUnlambda
-      - deprecatedComment
-      - docStub
-      - dupArg
-      - dupBranchBody
-      - dupCase
-      - dupImport
-      - dupSubExpr
-      - elseif
-      - emptyDecl
-      - emptyFallthrough
-      - emptyStringTest
-      - equalFold
-      - evalOrder
-      - exitAfterDefer
-      # - exposedSyncMutex
-      - externalErrorReassign
-      - filepathJoin
-      - flagDeref
-      - flagName
-      - hexLiteral
-      - httpNoBody
-      - hugeParam
-      - ifElseChain
-      - importShadow
-      - indexAlloc
-      - initClause
-      - ioutilDeprecated
-      - mapKey
-      - methodExprCall
-      - nestingReduce
-      - newDeref
-      - nilValReturn
-      - octalLiteral
-      - offBy1
-      - paramTypeCombine
-      - preferDecodeRune
-      - preferFilepathJoin
-      - preferFprint
-      - preferStringWriter
-      - preferWriteByte
-      - ptrToRefParam
-      - rangeExprCopy
-      - rangeValCopy
-      - redundantSprint
-      - regexpMust
-      - regexpPattern
-      - regexpSimplify
-      - returnAfterHttpError
-      - singleCaseSwitch
-      - sliceClear
-      - sloppyLen
-      - sloppyReassign
-      - sloppyTypeAssert
-      - sortSlice
-      - sprintfQuotedString
-      - sqlQuery
-      - stringConcatSimplify
-      - stringXbytes
-      # - suspiciousSorting
-      - switchTrue
-      - syncMapLoadAndDelete
-      - timeExprSimplify
-      - tooManyResultsChecker
-      - truncateCmp
-      - typeAssertChain
-      - typeDefFirst
-      - typeSwitchVar
-      - typeUnparen
-      - underef
-      - unlabelStmt
-      - unlambda
+    enabled-tags:
+      - diagnostic
+      - performance
+      - experimental
+      - opinionated
+      - style
+    disabled-checks:
+      - commentedOutCode
+      - exposedSyncMutex
+      - whyNoLint # todo: should be fixed
       - unnamedResult
-      - unnecessaryBlock
-      - unnecessaryDefer
-      - unslice
-      - valSwap
-      - weakCond
-      # - whyNoLint -- does not work properly
-      - wrapperFunc
-      - yodaStyleExpr
-    # disabled-checks:
-    #   - xxx
     settings:
       rangeValCopy:
         sizeThreshold: 32 # size in bytes that makes the warning trigger (default 128)
@@ -249,6 +161,8 @@ linters-settings:
       - name: argument-limit
         disabled: true
       - name: banned-characters
+        disabled: true
+      - name: comment-spacings
         disabled: true
       - name: add-constant
         arguments:

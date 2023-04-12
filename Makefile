@@ -9,7 +9,7 @@ GOPATH ?=$(shell go env GOPATH)
 GOPROXY ?= proxy.golang.org
 #GOPRIVATE ?= github.com/Mirantis/*,gerrit.mcp.mirantis.com/*
 
-GOLANGCILINT_VER ?= 1.51.1
+GOLANGCILINT_VER ?= 1.52.2
 GOLANGCILINT_BINARY ?= $(GOPATH)/bin/golangci-lint
 GOLANGCILINT_CHECK = $(if $(filter $(shell go env GOHOSTOS),darwin),,golangci)
 MIN_GOLANGCILINT_VER = $(shell echo "$(GOLANGCILINT_VER)" | awk -F. '{print $$1"."$$2}')

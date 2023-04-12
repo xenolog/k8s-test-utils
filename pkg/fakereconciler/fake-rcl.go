@@ -2,17 +2,17 @@ package fakereconciler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	"github.com/xenolog/k8s-utils/pkg/utils"
+	"github.com/xenolog/k8s-utils/pkg/utils/jsonpatch"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -211,9 +211,12 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 					// at least one finalizer found, DeletionTimestamp of the object should be set if absent
 					klog.Infof("RCL: deletion of [%s] '%s' done, there are %v finalizers found.", kindWD.kind, nName, k8sObj.GetFinalizers())
 					if k8sObj.GetDeletionTimestamp().IsZero() {
-						now := metav1.Now()
-						k8sObj.SetDeletionTimestamp(&now)
-						if err := r.client.Update(ctx, k8sObj); err != nil && !utils.IsNotFound(err) {
+						patch := jsonpatch.Patch{jsonpatch.NewOperation("add", "/metadata/deletionTimestamp", metav1.Now())}
+						obj := &unstructured.Unstructured{}
+						obj.SetGroupVersionKind(k8sObj.GetObjectKind().GroupVersionKind())
+						obj.SetNamespace(k8sObj.GetNamespace())
+						obj.SetName(k8sObj.GetName())
+						if err := r.client.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, patch.Bytes())); err != nil && !utils.IsNotFound(err) {
 							klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
 						}
 						// MODIFY event will initiate Reconcile automatically
@@ -344,51 +347,39 @@ func (r *ReconcileResponce) String() string {
 
 func ensureRequiredMetaFields(ctx context.Context, cl controllerRTclient.WithWatch, obj controllerRTclient.Object) {
 	const (
-		operation  = "replace"
+		op         = "add"
 		pathPrefix = "/metadata/"
 	)
-	type patchSection struct {
-		Op    string `json:"op"`
-		Path  string `json:"path"`
-		Value any    `json:"value"`
-	}
-	type patchSet []patchSection
 
 	objType := obj.GetObjectKind().GroupVersionKind().Kind
-	patch := patchSet{}
+	patch := jsonpatch.Patch{}
 
 	if obj.GetUID() == "" {
-		patch = append(patch, patchSection{Path: "uid", Value: uuid.NewString()})
+		patch = append(patch, jsonpatch.NewOperation(op, pathPrefix+"uid", uuid.NewString()))
 	}
 	if ts := obj.GetCreationTimestamp(); ts.IsZero() {
-		patch = append(patch, patchSection{Path: "creationTimestamp", Value: time.Now().UTC()})
+		patch = append(patch, jsonpatch.NewOperation(op, pathPrefix+"creationTimestamp", time.Now().UTC()))
 	}
 	if obj.GetGeneration() < 1 {
-		patch = append(patch, patchSection{Path: "generation", Value: int64(1)})
+		patch = append(patch, jsonpatch.NewOperation(op, pathPrefix+"generation", int64(1)))
 	}
 	if g, err := strconv.Atoi(obj.GetResourceVersion()); err != nil || g < 1 {
-		patch = append(patch, patchSection{Path: "resourceVersion", Value: fmt.Sprint(6000 + rand.Intn(100))}) //nolint
+		patch = append(patch, jsonpatch.NewOperation(op, pathPrefix+"resourceVersion", funk.RandomInt(6000, 6999))) //revive:disable:add-constant
 	}
 	if len(patch) > 0 {
-		fields := sort.StringSlice{}
-		for k := range patch {
-			patch[k].Op = operation
-			fields = append(fields, patch[k].Path)
-			patch[k].Path = pathPrefix + patch[k].Path
-		}
-		fields.Sort()
-		buff, err := json.Marshal(patch)
-		if err != nil {
-			klog.Errorf("RCL: unable to marshal Meta patch for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
-		}
-		if err := cl.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, buff)); err != nil {
-			klog.Errorf("RCL: unable to fix %v Meta fields for %s '%s/%s': %s", fields, objType, obj.GetNamespace(), obj.GetName(), err)
+		pObj := &unstructured.Unstructured{}
+		pObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+		pObj.SetNamespace(obj.GetNamespace())
+		pObj.SetName(obj.GetName())
+
+		if err := cl.Patch(ctx, pObj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, patch.Bytes())); err != nil {
+			klog.Errorf("RCL: unable to fix Meta fields for %s '%s/%s': %s", objType, obj.GetNamespace(), obj.GetName(), err)
 		} else {
-			klog.Warningf("RCL: fixed Meta fields %v for %s '%s/%s'", fields, objType, obj.GetNamespace(), obj.GetName())
+			klog.Warningf("RCL: fixed Meta fields for %s '%s/%s'", objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
 }
 
 func GetPauseTime() time.Duration {
-	return time.Duration(BasePauseTime+rand.Intn(BasePauseTime/4)) * time.Millisecond //nolint
+	return time.Duration(BasePauseTime+rand.Intn(BasePauseTime/4)) * time.Millisecond
 }

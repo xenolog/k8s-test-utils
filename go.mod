@@ -3,6 +3,7 @@ module github.com/xenolog/k8s-utils
 go 1.20
 
 require (
+	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/google/uuid v1.3.0
 	github.com/k0kubun/pp v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.8.2
@@ -20,7 +21,6 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.5 // indirect

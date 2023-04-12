@@ -1,34 +1,20 @@
-/*
-Copyright © 2020 Mirantis
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package jsonpatch
 
 import (
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
-	jsonpatch "gomodules.xyz/jsonpatch/v2"
+	jsonPatchConstructor "gomodules.xyz/jsonpatch/v2"
 )
 
 // ----------------------------------------------------------------------------
-type Operation = jsonpatch.Operation
+type Operation = jsonPatchConstructor.Operation
 
 type Patch []Operation
 
-var NewOperation = jsonpatch.NewOperation //nolint:gochecknoglobals
+var NewOperation = jsonPatchConstructor.NewOperation //nolint:gochecknoglobals
 
 // Len for https://godoc.org/sort#Interface
 func (r Patch) Len() int {
@@ -60,6 +46,28 @@ func (r Patch) String() string {
 
 func (r Patch) Bytes() []byte {
 	return []byte(r.String())
+}
+
+func CreatePatchForJson(a, b []byte) (Patch, error) {
+	rv, err := jsonPatchConstructor.CreatePatch(a, b)
+	if err != nil {
+		err = ErrBadJSONDoc
+	}
+	return rv, err
+}
+
+func CreatePatch(a, b any) (Patch, error) {
+	var (
+		aj, bj []byte
+		err    error
+	)
+	if aj, err = json.Marshal(a); err != nil {
+		return Patch{}, fmt.Errorf("%w: %w", ErrMarshalJSON, err)
+	}
+	if bj, err = json.Marshal(b); err != nil {
+		return Patch{}, fmt.Errorf("%w: %w", ErrMarshalJSON, err)
+	}
+	return CreatePatchForJson(aj, bj)
 }
 
 // Escaping some characters, corresponds to https://www.rfc-editor.org/rfc/rfc6901#section-3

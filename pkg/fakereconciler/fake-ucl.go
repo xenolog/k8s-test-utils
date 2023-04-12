@@ -88,7 +88,7 @@ func (r *fakeReconciler) WaitToBeDeleted(ctx context.Context, kindName, key stri
 		receivedErr, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
 		}
@@ -175,7 +175,7 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 		resp, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case resp.Err != nil:
 			err = resp.Err
 		}
@@ -203,7 +203,7 @@ func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, 
 		receivedErr, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
 		default:
@@ -233,7 +233,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 		receivedErr, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
 		}
@@ -320,7 +320,7 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 	respCh, err := r.WatchToFieldBeChecked(ctx, kind, key, fieldpath, callback)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		}
 	}
 	return err
@@ -441,7 +441,7 @@ func (r *fakeReconciler) WaitToFieldBeNotFound(ctx context.Context, kind, key, f
 	respCh, err := r.WatchToFieldBeNotFound(ctx, kind, key, fieldpath)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		}
 	}
 	return err

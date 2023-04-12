@@ -24,9 +24,9 @@ import (
 )
 
 func IsNotFound(err error) bool {
-	return errors.Is(err, k8t.ErrorNotFound) || apimErrors.IsNotFound(RecursiveUnwrap(err))
+	return errors.Is(err, k8t.ErrNotFound) || apimErrors.IsNotFound(RecursiveUnwrap(err))
 }
 
 func IsNotFoundOrMoreThanOne(err error) bool {
-	return errors.Is(err, k8t.ErrorMoreThanOne) || IsNotFound(err)
+	return errors.Is(err, k8t.ErrMoreThanOne) || IsNotFound(err)
 }

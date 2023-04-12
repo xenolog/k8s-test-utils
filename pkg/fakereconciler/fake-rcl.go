@@ -74,7 +74,7 @@ func (r *fakeReconciler) getKindStruct(kind string) (*kindWatcherData, error) {
 	defer r.Unlock()
 	rv, ok := r.kinds[kind]
 	if !ok {
-		return nil, fmt.Errorf("Kind '%s' does not served by this reconcile loop, %w", kind, k8t.ErrorDoNothing)
+		return nil, fmt.Errorf("Kind '%s' does not served by this reconcile loop, %w", kind, k8t.ErrDoNothing)
 	}
 	return rv, nil
 }
@@ -91,7 +91,7 @@ func (r *kindWatcherData) DeleteObj(key string) error {
 	defer r.Unlock()
 
 	if _, ok := r.processedObjs[key]; !ok {
-		return fmt.Errorf("%s '%s' %w", r.kind, key, k8t.ErrorNotFound)
+		return fmt.Errorf("%s '%s' %w", r.kind, key, k8t.ErrNotFound)
 	}
 	delete(r.processedObjs, key)
 	return nil

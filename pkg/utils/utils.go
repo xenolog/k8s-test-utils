@@ -30,7 +30,7 @@ func KeyToNamespacedName(ref string) (rv types.NamespacedName) {
 func GetRuntimeObjectNamespacedName(rtobj runtime.Object) (types.NamespacedName, error) {
 	obj, ok := rtobj.(k8t.K8sObject)
 	if !ok {
-		return types.NamespacedName{}, fmt.Errorf("GetRuntimeObjectNamespacedName: %w: given object is not a k8s object", k8t.ErrorWrongParametr)
+		return types.NamespacedName{}, fmt.Errorf("GetRuntimeObjectNamespacedName: %w: given object is not a k8s object", k8t.ErrWrongParametr)
 	}
 	return types.NamespacedName{
 		Namespace: obj.GetNamespace(),

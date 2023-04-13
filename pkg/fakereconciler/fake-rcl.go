@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
-	"github.com/xenolog/k8s-utils/pkg/utils"
+	k8u "github.com/xenolog/k8s-utils/pkg/utils"
 	"github.com/xenolog/k8s-utils/pkg/utils/jsonpatch"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -110,7 +110,7 @@ func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj c
 		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
 
-	nName, err := utils.GetRuntimeObjectNamespacedName(obj)
+	nName, err := k8u.GetRuntimeObjectNamespacedName(obj)
 	if err != nil {
 		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
@@ -166,7 +166,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			}
 
 			klog.Infof("RCL: %s '%s' going to reconcile", kind, req.Key)
-			nName := utils.KeyToNamespacedName(req.Key)
+			nName := k8u.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kindWD.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
@@ -186,7 +186,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			req.RespChan <- rv  // should
 			close(req.RespChan) // be together
 		case in := <-watcher.ResultChan():
-			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
+			nName, err := k8u.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {
 				panic("Wrong object passed from watcher")
 			}
@@ -216,7 +216,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 						obj.SetGroupVersionKind(k8sObj.GetObjectKind().GroupVersionKind())
 						obj.SetNamespace(k8sObj.GetNamespace())
 						obj.SetName(k8sObj.GetName())
-						if err := r.client.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, patch.Bytes())); err != nil && !utils.IsNotFound(err) {
+						if err := r.client.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, patch.Bytes())); err != nil && !k8u.IsNotFound(err) {
 							klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
 						}
 						// MODIFY event will initiate Reconcile automatically

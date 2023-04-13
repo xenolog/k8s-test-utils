@@ -8,7 +8,8 @@ import (
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
-	k8sutil "github.com/xenolog/k8s-utils/pkg/utils"
+	k8u "github.com/xenolog/k8s-utils/pkg/utils"
+	apimErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	klog "k8s.io/klog/v2"
 )
@@ -48,14 +49,14 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 		if err != nil {
 			respChan <- err
 		}
-		nName := k8sutil.KeyToNamespacedName(key)
+		nName := k8u.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*kwd.gvk)
 		for {
 			// check object exists
 			err = r.client.Get(ctx, nName, obj)
 			switch {
-			case k8sutil.IsNotFound(err):
+			case k8u.IsNotFound(err):
 				klog.Warningf("%s, object removed successfully", logKey)
 				respChan <- nil
 				return
@@ -135,7 +136,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 
 			// check object exists
-			nName := k8sutil.KeyToNamespacedName(key)
+			nName := k8u.KeyToNamespacedName(key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kwd.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
@@ -144,6 +145,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 
 			objRec, ok := kwd.GetObj(key)
+		analizeLastReconcileResponse:
 			switch {
 			case !ok:
 				// object record may be absent if object really not found or if object exists, but never reconciled
@@ -153,9 +155,13 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				lastLogRecord := objRec.log[len(objRec.log)-1]
 				if !reconciledAfter.IsZero() {
 					lastReconcileTs := lastLogRecord.StartFinishTime[0]
-					if lastReconcileTs.Before(reconciledAfter) {
+					switch {
+					case lastReconcileTs.Before(reconciledAfter):
 						klog.Warningf("%s: reconciled at '%s', earlier than '%s', continue waiting...", logKey, lastReconcileTs.UTC().Format(k8t.FmtRFC3339), reconciledAfter.UTC().Format(k8t.FmtRFC3339))
-						break // switch
+						break analizeLastReconcileResponse
+					case apimErrors.IsConflict(lastLogRecord.Err):
+						klog.Warningf("%s: reconciled at '%s', but conflict", logKey, lastReconcileTs.UTC().Format(k8t.FmtRFC3339))
+						break analizeLastReconcileResponse
 					}
 				}
 				respChan <- &lastLogRecord
@@ -197,9 +203,8 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 
 func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) { //revive:disable:flag-parameter
 	logKey := fmt.Sprintf("RCL: WaitingToBeCreated [%s] '%s'", kind, key)
-	reallyIsReconciled := isReconciled
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in any) bool {
-		if !reallyIsReconciled {
+		if !isReconciled {
 			return true
 		}
 		status, ok := in.(map[string]any)
@@ -276,7 +281,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	go func(kind, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		nName := k8sutil.KeyToNamespacedName(key)
+		nName := k8u.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*rr.gvk)
 		pathSlice := fieldPathSplitRE.Split(fp, -1)
@@ -284,7 +289,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 			klog.Warningf("%s...", logKey)
 			err := r.client.Get(ctx, nName, obj)
 			switch {
-			case k8sutil.IsNotFound(err):
+			case k8u.IsNotFound(err):
 				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to be created...", logKey, kind, key)
 			case err != nil:
 				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
@@ -399,7 +404,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 	go func(_, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		nName := k8sutil.KeyToNamespacedName(key)
+		nName := k8u.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*rr.gvk)
 		pathSlice := fieldPathSplitRE.Split(fp, -1)

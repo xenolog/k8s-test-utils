@@ -3,14 +3,25 @@ package fakereconciler
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
-	k8sutil "github.com/xenolog/k8s-utils/pkg/utils"
+	k8u "github.com/xenolog/k8s-utils/pkg/utils"
+	apimErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	klog "k8s.io/klog/v2"
 )
+
+func (r *fakeReconciler) SetPauseTime(ms time.Duration) {
+	r.pauseTime = ms
+}
+
+func (r *fakeReconciler) GetPauseTime() time.Duration {
+	randomAddition := time.Duration(rand.Int63n(int64(r.pauseTime/4))) * time.Millisecond
+	return r.pauseTime + randomAddition
+}
 
 func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) (chan error, error) {
 	if r.mainloopContext == nil {
@@ -38,14 +49,14 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 		if err != nil {
 			respChan <- err
 		}
-		nName := k8sutil.KeyToNamespacedName(key)
+		nName := k8u.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*kwd.gvk)
 		for {
 			// check object exists
 			err = r.client.Get(ctx, nName, obj)
 			switch {
-			case k8sutil.IsNotFound(err):
+			case k8u.IsNotFound(err):
 				klog.Warningf("%s, object removed successfully", logKey)
 				respChan <- nil
 				return
@@ -73,7 +84,7 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -88,7 +99,7 @@ func (r *fakeReconciler) WaitToBeDeleted(ctx context.Context, kindName, key stri
 		receivedErr, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
 		}
@@ -125,7 +136,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 
 			// check object exists
-			nName := k8sutil.KeyToNamespacedName(key)
+			nName := k8u.KeyToNamespacedName(key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kwd.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
@@ -134,6 +145,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 			}
 
 			objRec, ok := kwd.GetObj(key)
+		analizeLastReconcileResponse:
 			switch {
 			case !ok:
 				// object record may be absent if object really not found or if object exists, but never reconciled
@@ -143,9 +155,13 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				lastLogRecord := objRec.log[len(objRec.log)-1]
 				if !reconciledAfter.IsZero() {
 					lastReconcileTs := lastLogRecord.StartFinishTime[0]
-					if lastReconcileTs.Before(reconciledAfter) {
+					switch {
+					case lastReconcileTs.Before(reconciledAfter):
 						klog.Warningf("%s: reconciled at '%s', earlier than '%s', continue waiting...", logKey, lastReconcileTs.UTC().Format(k8t.FmtRFC3339), reconciledAfter.UTC().Format(k8t.FmtRFC3339))
-						break // switch
+						break analizeLastReconcileResponse
+					case apimErrors.IsConflict(lastLogRecord.Err):
+						klog.Warningf("%s: reconciled at '%s', but conflict", logKey, lastReconcileTs.UTC().Format(k8t.FmtRFC3339))
+						break analizeLastReconcileResponse
 					}
 				}
 				respChan <- &lastLogRecord
@@ -160,7 +176,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- &ReconcileResponce{Err: ctx.Err()}
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -175,7 +191,7 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 		resp, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case resp.Err != nil:
 			err = resp.Err
 		}
@@ -187,9 +203,8 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 
 func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) { //revive:disable:flag-parameter
 	logKey := fmt.Sprintf("RCL: WaitingToBeCreated [%s] '%s'", kind, key)
-	reallyIsReconciled := isReconciled
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in any) bool {
-		if !reallyIsReconciled {
+		if !isReconciled {
 			return true
 		}
 		status, ok := in.(map[string]any)
@@ -203,7 +218,7 @@ func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, 
 		receivedErr, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
 		default:
@@ -233,7 +248,7 @@ func (r *fakeReconciler) WaitToFieldSatisfyRE(ctx context.Context, kind, key, fi
 		receivedErr, ok := <-respCh
 		switch {
 		case !ok:
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		case receivedErr != nil:
 			err = receivedErr
 		}
@@ -266,7 +281,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 	go func(kind, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		nName := k8sutil.KeyToNamespacedName(key)
+		nName := k8u.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*rr.gvk)
 		pathSlice := fieldPathSplitRE.Split(fp, -1)
@@ -274,7 +289,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 			klog.Warningf("%s...", logKey)
 			err := r.client.Get(ctx, nName, obj)
 			switch {
-			case k8sutil.IsNotFound(err):
+			case k8u.IsNotFound(err):
 				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to be created...", logKey, kind, key)
 			case err != nil:
 				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
@@ -302,7 +317,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -320,7 +335,7 @@ func (r *fakeReconciler) WaitToFieldBeChecked(ctx context.Context, kind, key, fi
 	respCh, err := r.WatchToFieldBeChecked(ctx, kind, key, fieldpath, callback)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		}
 	}
 	return err
@@ -359,7 +374,7 @@ exLoop:
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("%w, %d left", ctx.Err(), len(chanList))
-		case <-time.After(GetPauseTime()):
+		case <-time.After(r.GetPauseTime()):
 			continue
 		}
 	}
@@ -389,7 +404,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 	go func(_, key, fp, logKey string, respChan chan error) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		nName := k8sutil.KeyToNamespacedName(key)
+		nName := k8u.KeyToNamespacedName(key)
 		obj := &unstructured.Unstructured{}
 		obj.SetGroupVersionKind(*rr.gvk)
 		pathSlice := fieldPathSplitRE.Split(fp, -1)
@@ -423,7 +438,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -441,7 +456,7 @@ func (r *fakeReconciler) WaitToFieldBeNotFound(ctx context.Context, kind, key, f
 	respCh, err := r.WatchToFieldBeNotFound(ctx, kind, key, fieldpath)
 	if err == nil {
 		if _, ok := <-respCh; !ok {
-			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrorSomethingWentWrong)
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
 		}
 	}
 	return err

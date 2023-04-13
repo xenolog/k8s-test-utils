@@ -3,7 +3,6 @@ package fakereconciler
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -11,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
-	"github.com/xenolog/k8s-utils/pkg/utils"
+	k8u "github.com/xenolog/k8s-utils/pkg/utils"
 	"github.com/xenolog/k8s-utils/pkg/utils/jsonpatch"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -25,7 +24,7 @@ import (
 )
 
 const (
-	BasePauseTime       = 373 // ms
+	BasePauseTime       = 373 * time.Millisecond
 	ControlChanBuffSize = 255
 
 	MsgUnableToWatch        = "Unable to watch"
@@ -59,6 +58,7 @@ type fakeReconciler struct {
 	mainloopContext context.Context //nolint: containedctx
 	watchersWG      sync.WaitGroup
 	userTasksWG     sync.WaitGroup
+	pauseTime       time.Duration
 }
 
 func (r *fakeReconciler) GetClient() controllerRTclient.WithWatch {
@@ -74,7 +74,7 @@ func (r *fakeReconciler) getKindStruct(kind string) (*kindWatcherData, error) {
 	defer r.Unlock()
 	rv, ok := r.kinds[kind]
 	if !ok {
-		return nil, fmt.Errorf("Kind '%s' does not served by this reconcile loop, %w", kind, k8t.ErrorDoNothing)
+		return nil, fmt.Errorf("Kind '%s' does not served by this reconcile loop, %w", kind, k8t.ErrDoNothing)
 	}
 	return rv, nil
 }
@@ -91,7 +91,7 @@ func (r *kindWatcherData) DeleteObj(key string) error {
 	defer r.Unlock()
 
 	if _, ok := r.processedObjs[key]; !ok {
-		return fmt.Errorf("%s '%s' %w", r.kind, key, k8t.ErrorNotFound)
+		return fmt.Errorf("%s '%s' %w", r.kind, key, k8t.ErrNotFound)
 	}
 	delete(r.processedObjs, key)
 	return nil
@@ -110,7 +110,7 @@ func (r *fakeReconciler) doReconcile(ctx context.Context, kindName string, obj c
 		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
 
-	nName, err := utils.GetRuntimeObjectNamespacedName(obj)
+	nName, err := k8u.GetRuntimeObjectNamespacedName(obj)
 	if err != nil {
 		return &ReconcileResponce{Err: err, StartFinishTime: k8t.TimeInterval{startTime, time.Now()}}
 	}
@@ -166,7 +166,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			}
 
 			klog.Infof("RCL: %s '%s' going to reconcile", kind, req.Key)
-			nName := utils.KeyToNamespacedName(req.Key)
+			nName := k8u.KeyToNamespacedName(req.Key)
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(*kindWD.gvk)
 			if err := r.client.Get(ctx, nName, obj); err != nil {
@@ -186,7 +186,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 			req.RespChan <- rv  // should
 			close(req.RespChan) // be together
 		case in := <-watcher.ResultChan():
-			nName, err := utils.GetRuntimeObjectNamespacedName(in.Object)
+			nName, err := k8u.GetRuntimeObjectNamespacedName(in.Object)
 			if err != nil {
 				panic("Wrong object passed from watcher")
 			}
@@ -216,7 +216,7 @@ func (r *fakeReconciler) doWatch(ctx context.Context, watcher watch.Interface, k
 						obj.SetGroupVersionKind(k8sObj.GetObjectKind().GroupVersionKind())
 						obj.SetNamespace(k8sObj.GetNamespace())
 						obj.SetName(k8sObj.GetName())
-						if err := r.client.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, patch.Bytes())); err != nil && !utils.IsNotFound(err) {
+						if err := r.client.Patch(ctx, obj, controllerRTclient.RawPatch(apimTypes.JSONPatchType, patch.Bytes())); err != nil && !k8u.IsNotFound(err) {
 							klog.Errorf("RCL: Obj '%s' deletion error: %s", nName, err)
 						}
 						// MODIFY event will initiate Reconcile automatically
@@ -334,9 +334,10 @@ func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl control
 
 func NewFakeReconciler(fakeClient controllerRTclient.WithWatch, scheme *runtime.Scheme) FakeReconciler {
 	rv := &fakeReconciler{
-		kinds:  map[string]*kindWatcherData{},
-		scheme: scheme,
-		client: fakeClient,
+		kinds:     map[string]*kindWatcherData{},
+		scheme:    scheme,
+		client:    fakeClient,
+		pauseTime: BasePauseTime,
 	}
 	return rv
 }
@@ -378,8 +379,4 @@ func ensureRequiredMetaFields(ctx context.Context, cl controllerRTclient.WithWat
 			klog.Warningf("RCL: fixed Meta fields for %s '%s/%s'", objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
-}
-
-func GetPauseTime() time.Duration {
-	return time.Duration(BasePauseTime+rand.Intn(BasePauseTime/4)) * time.Millisecond
 }

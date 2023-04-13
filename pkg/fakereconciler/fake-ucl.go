@@ -3,10 +3,10 @@ package fakereconciler
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"regexp"
 	"time"
 
+	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	k8u "github.com/xenolog/k8s-utils/pkg/utils"
 	apimErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,11 +15,13 @@ import (
 )
 
 func (r *fakeReconciler) SetPauseTime(ms time.Duration) {
+	r.Lock()
+	defer r.Unlock()
 	r.pauseTime = ms
 }
 
 func (r *fakeReconciler) GetPauseTime() time.Duration {
-	randomAddition := time.Duration(rand.Int63n(int64(r.pauseTime/4))) * time.Millisecond
+	randomAddition := time.Duration(funk.RandomInt(1, int(r.pauseTime/4)))
 	return r.pauseTime + randomAddition
 }
 
@@ -43,7 +45,7 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 	go func(kindName, key string, respChan chan error, rvd bool) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		logKey := fmt.Sprintf("RCL: WaitingToBeDeleted [%s] '%s'", kindName, key)
+		logKey := fmt.Sprintf("RCL: WaitingToBeDeleted %v [%s] '%s'", r.pauseTime, kindName, key)
 
 		kwd, err := r.getKindStruct(kindName)
 		if err != nil {
@@ -128,7 +130,8 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 	go func(kindName, key string, respChan chan *ReconcileResponce) {
 		defer r.userTasksWG.Done()
 		defer close(respChan)
-		logKey := fmt.Sprintf("RCL: WaitingToBeReconciled [%s] '%s'", kindName, key)
+		logKey := fmt.Sprintf("RCL: WaitingToBeReconciled %v [%s] '%s'", r.pauseTime, kindName, key)
+
 		for {
 			kwd, err := r.getKindStruct(kindName)
 			if err != nil {
@@ -202,7 +205,7 @@ func (r *fakeReconciler) WaitToBeReconciled(ctx context.Context, kindName, key s
 //-----------------------------------------------------------------------------
 
 func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string, isReconciled bool) (chan error, error) { //revive:disable:flag-parameter
-	logKey := fmt.Sprintf("RCL: WaitingToBeCreated [%s] '%s'", kind, key)
+	logKey := fmt.Sprintf("RCL: WaitingToBeCreated %v [%s] '%s'", r.pauseTime, kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, "status", func(in any) bool {
 		if !isReconciled {
 			return true
@@ -231,7 +234,7 @@ func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, 
 //-----------------------------------------------------------------------------
 
 func (r *fakeReconciler) WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldpath, reString string) (chan error, error) {
-	logKey := fmt.Sprintf("RCL: WaitingToFieldSatisfyRE [%s] '%s'", kind, key)
+	logKey := fmt.Sprintf("RCL: WaitingToFieldSatisfyRE %v [%s] '%s'", r.pauseTime, kind, key)
 	re := regexp.MustCompile(reString)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, func(in any) bool {
 		str, ok := in.(string)
@@ -327,7 +330,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 }
 
 func (r *fakeReconciler) WatchToFieldBeChecked(ctx context.Context, kind, key, fieldpath string, callback func(any) bool) (chan error, error) { //revive:disable:confusing-naming
-	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked [%s] '%s'", kind, key)
+	logKey := fmt.Sprintf("RCL: WaitingToFieldBeChecked %v [%s] '%s'", r.pauseTime, kind, key)
 	return r.watchToFieldBeChecked(ctx, logKey, kind, key, fieldpath, callback)
 }
 
@@ -448,7 +451,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 }
 
 func (r *fakeReconciler) WatchToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) (chan error, error) { //revive:disable:confusing-naming
-	logKey := fmt.Sprintf("RCL: WaitingToFieldBeNotFound [%s] '%s'", kind, key)
+	logKey := fmt.Sprintf("RCL: WaitingToFieldBeNotFound %v [%s] '%s'", r.pauseTime, kind, key)
 	return r.watchToFieldBeNotFound(ctx, logKey, kind, key, fieldpath)
 }
 

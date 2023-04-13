@@ -3,7 +3,6 @@ package fakereconciler
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -25,7 +24,7 @@ import (
 )
 
 const (
-	BasePauseTime       = 373 // ms
+	BasePauseTime       = 373 * time.Millisecond
 	ControlChanBuffSize = 255
 
 	MsgUnableToWatch        = "Unable to watch"
@@ -59,6 +58,7 @@ type fakeReconciler struct {
 	mainloopContext context.Context //nolint: containedctx
 	watchersWG      sync.WaitGroup
 	userTasksWG     sync.WaitGroup
+	pauseTime       time.Duration
 }
 
 func (r *fakeReconciler) GetClient() controllerRTclient.WithWatch {
@@ -334,9 +334,10 @@ func (r *fakeReconciler) AddController(gvk *schema.GroupVersionKind, rcl control
 
 func NewFakeReconciler(fakeClient controllerRTclient.WithWatch, scheme *runtime.Scheme) FakeReconciler {
 	rv := &fakeReconciler{
-		kinds:  map[string]*kindWatcherData{},
-		scheme: scheme,
-		client: fakeClient,
+		kinds:     map[string]*kindWatcherData{},
+		scheme:    scheme,
+		client:    fakeClient,
+		pauseTime: BasePauseTime,
 	}
 	return rv
 }
@@ -378,8 +379,4 @@ func ensureRequiredMetaFields(ctx context.Context, cl controllerRTclient.WithWat
 			klog.Warningf("RCL: fixed Meta fields for %s '%s/%s'", objType, obj.GetNamespace(), obj.GetName())
 		}
 	}
-}
-
-func GetPauseTime() time.Duration {
-	return time.Duration(BasePauseTime+rand.Intn(BasePauseTime/4)) * time.Millisecond
 }

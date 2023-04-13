@@ -3,6 +3,7 @@ package fakereconciler
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"time"
 
@@ -11,6 +12,15 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	klog "k8s.io/klog/v2"
 )
+
+func (r *fakeReconciler) SetPauseTime(ms time.Duration) {
+	r.pauseTime = ms
+}
+
+func (r *fakeReconciler) GetPauseTime() time.Duration {
+	randomAddition := time.Duration(rand.Int63n(int64(r.pauseTime/4))) * time.Millisecond
+	return r.pauseTime + randomAddition
+}
 
 func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) (chan error, error) {
 	if r.mainloopContext == nil {
@@ -73,7 +83,7 @@ func (r *fakeReconciler) WatchToBeDeleted(ctx context.Context, kindName, key str
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -160,7 +170,7 @@ func (r *fakeReconciler) WatchToBeReconciled(ctx context.Context, kindName, key 
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- &ReconcileResponce{Err: ctx.Err()}
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -302,7 +312,7 @@ func (r *fakeReconciler) watchToFieldBeChecked(ctx context.Context, logKey, kind
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}
@@ -359,7 +369,7 @@ exLoop:
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("%w, %d left", ctx.Err(), len(chanList))
-		case <-time.After(GetPauseTime()):
+		case <-time.After(r.GetPauseTime()):
 			continue
 		}
 	}
@@ -423,7 +433,7 @@ func (r *fakeReconciler) watchToFieldBeNotFound(ctx context.Context, logKey, kin
 				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
 				respChan <- ctx.Err()
 				return
-			case <-time.After(GetPauseTime()):
+			case <-time.After(r.GetPauseTime()):
 				continue
 			}
 		}

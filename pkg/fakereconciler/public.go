@@ -130,6 +130,9 @@ type FakeReconciler interface {
 
 	GetClient() controllerRTclient.WithWatch
 	GetScheme() *runtime.Scheme
+
+	// SetPauseTime -- Configure pause between resource state check for Wait/Watch calls
+	SetPauseTime(time.Duration)
 }
 
 type ReconcileResponce struct {

@@ -133,6 +133,7 @@ type FakeReconciler interface {
 
 	// SetPauseTime -- Configure pause between resource state check for Wait/Watch calls
 	SetPauseTime(time.Duration)
+	GetPauseTime() time.Duration
 }
 
 type ReconcileResponce struct {

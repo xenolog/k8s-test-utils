@@ -580,42 +580,50 @@ func (r *fakeReconciler) WaitToFieldBeNotFound(ctx context.Context, kind, key, f
 
 // -----------------------------------------------------------------------------
 
-func (r *fakeReconciler) FetchAndPublishIfTestFailed(ctx context.Context, t *testing.T, kindName, key string) func() {
-	return func() {
-		if t.Failed() {
-			if r.mainloopContext == nil {
-				t.Logf("ERR: %s", MsgMainLoopIsNotStarted)
-				return
-			}
-			if ctx == nil {
-				ctx = r.mainloopContext
-			}
-			if err := ctx.Err(); err != nil {
-				t.Logf("ERR: %s", err)
-				return
-			}
-			rr, err := r.getKindStruct(kindName)
-			if err != nil {
-				t.Logf("ERR: %s", err)
-				return
-			}
+func (r *fakeReconciler) GetAndPublishIfTestFailed(ctx context.Context, t *testing.T, kindName, key string) func() {
+	run, _ := r.GetAndPublishIfTestFailedWithCancel(ctx, t, kindName, key)
+	return run
+}
 
-			nName := k8u.KeyToNamespacedName(key)
-			obj := &unstructured.Unstructured{}
-			obj.SetGroupVersionKind(*rr.gvk)
-			err = r.client.Get(ctx, nName, obj)
-			if err != nil {
-				t.Logf("ERR while fetching obj: %s", err)
-				return
+func (r *fakeReconciler) GetAndPublishIfTestFailedWithCancel(ctx context.Context, t *testing.T, kindName, key string) (func(), func()) {
+	do := true
+	return func() {
+			if t.Failed() && do {
+				if r.mainloopContext == nil {
+					t.Logf("ERR: %s", MsgMainLoopIsNotStarted)
+					return
+				}
+				if ctx == nil {
+					ctx = r.mainloopContext
+				}
+				if err := ctx.Err(); err != nil {
+					t.Logf("ERR: %s", err)
+					return
+				}
+				rr, err := r.getKindStruct(kindName)
+				if err != nil {
+					t.Logf("ERR: %s", err)
+					return
+				}
+
+				nName := k8u.KeyToNamespacedName(key)
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(*rr.gvk)
+				err = r.client.Get(ctx, nName, obj)
+				if err != nil {
+					t.Logf("ERR while fetching obj: %s", err)
+					return
+				}
+				buff, err := yaml.Marshal(obj.Object)
+				if err != nil {
+					t.Logf("ERR while YAML marshaling: %s", err)
+					return
+				}
+				t.Logf("[%s] %s:\n%s\n", kindName, nName.String(), string(buff))
 			}
-			buff, err := yaml.Marshal(obj.Object)
-			if err != nil {
-				t.Logf("ERR while YAML marshaling: %s", err)
-				return
-			}
-			t.Logf("[%s] %s:\n%s\n", kindName, nName.String(), string(buff))
+		}, func() {
+			do = false
 		}
-	}
 }
 
 // -----------------------------------------------------------------------------

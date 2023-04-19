@@ -213,7 +213,7 @@ func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string,
 		if !isReconciled {
 			return true
 		}
-		status, ok := in.(map[string]any)
+		status, ok := in.(map[string]any) // status exists if resource reconciled
 		return ok && len(status) > 0
 	})
 }

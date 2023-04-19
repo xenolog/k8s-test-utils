@@ -2,6 +2,7 @@ package fakereconciler
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
@@ -35,22 +36,22 @@ type FakeReconciler interface {
 	// returns callable to Unock thread
 	LockReconciler(kindName string) (unlock func())
 
-	// WaitToBeCreated -- block gorutine while corresponded CRD will be created.
+	// WaitToBeCreated -- block goroutine while corresponded CRD will be created.
 	//
 	// If isReconciled is false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconciled result (status exists and not empty) will be waited.
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) error
 
-	// WatchToBeCreated -- run gorutine to wait while corresponded CRD will be created.
+	// WatchToBeCreated -- run goroutine to wait while corresponded CRD will be created.
 	//
 	// If isReconciled is false just reconciliation record (fact) will be probed,
 	// else (if true) -- reconciled result (status exists and not empty) will be watched.
-	// Does not block current gorutine,  error chan returned to obtain result if need
+	// Does not block current goroutine,  error chan returned to obtain result if need
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WatchToBeCreated(ctx context.Context, kindName, key string, isReconciled bool) (chan error, error)
 
-	// WaitToBeReconciled -- block gorutine while corresponded CRD will be reconciled.
+	// WaitToBeReconciled -- block goroutine while corresponded CRD will be reconciled.
 	//
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
@@ -58,61 +59,83 @@ type FakeReconciler interface {
 	// Throw error if kind not found, use Wait/WatchToBeCreated(...) to check it.
 	WaitToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) error
 
-	// WatchToBeReconciled -- run gorutine to wait while corresponded CRD will be reconciled.
+	// WatchToBeReconciled -- run goroutine to wait while corresponded CRD will be reconciled.
 	//
 	// if reconciledAfter if zero just reconciliation record (fact) will be probed,
 	// else (if real time passed) only fresh reconciliation (after given time) will be accounted
-	// Does not block current gorutine,  error chan returned to obtain result if need
+	// Does not block current goroutine,  error chan returned to obtain result if need
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	// Throw error if kind not found, use Wait/WatchToBeCreated(...) to check it.
 	WatchToBeReconciled(ctx context.Context, kindName, key string, reconciledAfter time.Time) (chan *ReconcileResponce, error)
 
-	// WaitToFieldSatisfyRE -- block gorutine while corresponded CRD field will be satisfy to the given regexp.
+	// WaitToSatisfyJQ -- block goroutine while correspond CRD is not satisfied to the given JQ script
+	//
+	// for additional info see https://stedolan.github.io/jq/ and https://pkg.go.dev/github.com/itchyny/gojq
+	// ./JQ query result should return a bool result
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Throw error if wrong JQ script given
+	WaitToSatisfyJQ(ctx context.Context, kindName, key, jq string) error
+
+	// WatchToSatisfyJQ -- run goroutine to wait while correspond CRD is not satisfied to the given JQ script and reports to chan
+	//
+	// for additional info see https://stedolan.github.io/jq/ and https://pkg.go.dev/github.com/itchyny/gojq
+	// ./JQ query result should return a bool result
+	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Throw error if wrong JQ script given
+	WatchToSatisfyJQ(ctx context.Context, kindName, key, jq string) (chan error, error)
+
+	// WaitToFieldSatisfyRE -- block goroutine while corresponded CRD field will be satisfy to the given regexp.
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Deprecated: Use WaitToSatisfyJQ(...) instead.
 	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) error
 
-	// WatchToFieldSatisfyRE -- run gorutine to wait while corresponded CRD field will be satisfy to the given regexp.
+	// WatchToFieldSatisfyRE -- run goroutine to wait while corresponded CRD field will be satisfy to the given regexp.
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use stored early
+	// Deprecated: Use WatchToSatisfyJQ(...) instead.
 	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan error, error)
 
-	// WaitToFieldBeChecked -- block gorutine while corresponded CRD field will be exists and checked by callback function.
+	// WaitToFieldBeChecked -- block goroutine while corresponded CRD field will be exists and checked by callback function.
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Deprecated: Use WaitToSatisfyJQ(...) instead.
 	WaitToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) error
 
-	// WatchToFieldBeChecked -- run gorutine to wait while corresponded CRD field will be exists and checked by callback function.
+	// WatchToFieldBeChecked -- run goroutine to wait while corresponded CRD field will be exists and checked by callback function.
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Deprecated: Use WatchToSatisfyJQ(...) instead.
 	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) (chan error, error)
 
-	// WaitToFieldBeNotFound -- block gorutine while corresponded CRD field will be not exists (cleaned).
+	// WaitToFieldBeNotFound -- block goroutine while corresponded CRD field will be not exists (cleaned).
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Deprecated: Use WaitToSatisfyJQ(...) instead.
 	WaitToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) error
 
-	// WatchToFieldBeNotFound -- run gorutine to wait while corresponded CRD field will be not exists (cleaned).
+	// WatchToFieldBeNotFound -- run goroutine to wait while corresponded CRD field will be not exists (cleaned).
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	// Deprecated: Use WatchToSatisfyJQ(...) instead.
 	WatchToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) (chan error, error)
 
-	// WaitToBeDeleted -- block gorutine while corresponded CRD will be deleted.
+	// WaitToBeDeleted -- block goroutine while corresponded CRD will be deleted.
 	//
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	// If requireValidDeletion is `true` object should be really deleted,
 	// otherwise valid deletionTimestamp is enough
 	WaitToBeDeleted(ctx context.Context, kindName, key string, requireValidDeletion bool) error
 
-	// WatchToBeDeleted -- run gorutine to wait while corresponded CRD will be deleted.
+	// WatchToBeDeleted -- run goroutine to wait while corresponded CRD will be deleted.
 	//
-	// Does not block current gorutine,  error chan returned to obtain result if need
+	// Does not block current goroutine,  error chan returned to obtain result if need
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	// If requireValidDeletion is `true` object should be really deleted,
 	// otherwise valid deletionTimestamp is enough
@@ -123,6 +146,8 @@ type FakeReconciler interface {
 	//
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToBeFinished(ctx context.Context, chanList []chan error) error
+
+	FetchAndPublishIfTestFailed(ctx context.Context, t *testing.T, kindName, key string) func()
 
 	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl controllerRTreconcile.Reconciler) error

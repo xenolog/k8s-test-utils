@@ -12,6 +12,7 @@ func Test__Q(t *testing.T) {
 
 	tt.EqualValues("aaa~1bbb", jsonpatch.Q("aaa/bbb"))
 	tt.EqualValues("aaa~0bbb", jsonpatch.Q("aaa~bbb"))
+	tt.EqualValues("aaa~0bbb~1ccc~02ddd~03eee~0afff~0.ggg", jsonpatch.Q("aaa~0bbb~1ccc~2ddd~3eee~afff~.ggg"))
 }
 
 func Test__CreatePatchForJson(t *testing.T) {

@@ -3,18 +3,19 @@ package jsonpatch
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
-	jsonPatchConstructor "gomodules.xyz/jsonpatch/v2"
+	jsonPatchConstructor "github.com/mattbaird/jsonpatch"
 )
 
 // ----------------------------------------------------------------------------
-type Operation = jsonPatchConstructor.Operation
+type Operation = jsonPatchConstructor.JsonPatchOperation
 
-type Patch []Operation
+type Patch []Operation // todo(SV): should not contains duplicate paths
 
-var NewOperation = jsonPatchConstructor.NewOperation //nolint:gochecknoglobals
+var NewOperation = jsonPatchConstructor.NewPatch //nolint:gochecknoglobals
 
 // Len for https://godoc.org/sort#Interface
 func (r Patch) Len() int {
@@ -36,7 +37,7 @@ func (r Patch) Sort() Patch {
 	return r
 }
 
-func (r Patch) String() string {
+func (r Patch) Json() string {
 	accum := make([]string, 0, len(r))
 	for i := range r.Sort() {
 		accum = append(accum, r[i].Json())
@@ -44,8 +45,12 @@ func (r Patch) String() string {
 	return "[" + strings.Join(accum, ",") + "]"
 }
 
+func (r Patch) String() string {
+	return r.Json()
+}
+
 func (r Patch) Bytes() []byte {
-	return []byte(r.String())
+	return []byte(r.Json())
 }
 
 func CreatePatchForJson(a, b []byte) (Patch, error) {
@@ -70,9 +75,12 @@ func CreatePatch(a, b any) (Patch, error) {
 	return CreatePatchForJson(aj, bj)
 }
 
+// do not touch already escaped '/' and '~', i.e. '~0' and '~1'
+var rfc6901re0 = regexp.MustCompile(`(~([^01]))`)
+
 // Escaping some characters, corresponds to https://www.rfc-editor.org/rfc/rfc6901#section-3
 func Q(s string) string {
-	s = strings.ReplaceAll(s, "~", `~0`)
+	s = rfc6901re0.ReplaceAllString(s, `~0${2}`)
 	s = strings.ReplaceAll(s, "/", `~1`)
 	return s
 }

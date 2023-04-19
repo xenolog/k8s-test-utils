@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/itchyny/gojq"
 	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	k8u "github.com/xenolog/k8s-utils/pkg/utils"
@@ -229,6 +230,116 @@ func (r *fakeReconciler) WaitToBeCreated(ctx context.Context, kind, key string, 
 		}
 	}
 	return err
+}
+
+//-----------------------------------------------------------------------------
+
+func (r *fakeReconciler) WaitToSatisfyJQ(ctx context.Context, kind, key, jqString string) error {
+	respCh, err := r.WatchToSatisfyJQ(ctx, kind, key, jqString)
+	if err == nil {
+		receivedErr, ok := <-respCh
+		switch {
+		case !ok:
+			err = fmt.Errorf(k8t.FmtResponseChanUClosed, k8t.ErrSomethingWentWrong)
+		case receivedErr != nil:
+			err = receivedErr
+		}
+	}
+	return err
+}
+
+func (r *fakeReconciler) WatchToSatisfyJQ(ctx context.Context, kindName, key, jqString string) (chan error, error) {
+	if r.mainloopContext == nil {
+		return nil, fmt.Errorf(k8t.FmtKW, MsgUnableToWatch, MsgMainLoopIsNotStarted)
+	}
+	if ctx == nil {
+		ctx = r.mainloopContext //nolint: contextcheck
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf(k8t.FmtErrKW, MsgUnableToWatch, err)
+	}
+
+	jq, err := gojq.Parse(jqString)
+	if err != nil {
+		return nil, fmt.Errorf(k8t.FmtErrKW, MsgUnableToWatch, err)
+	}
+
+	rr, err := r.getKindStruct(kindName)
+	if err != nil {
+		return nil, err
+	}
+	respChan := make(chan error, 1) // buffered to push-and-close result
+
+	r.userTasksWG.Add(1)
+	go func(kind, key string, jq *gojq.Query, respChan chan error) {
+		defer r.userTasksWG.Done()
+		defer close(respChan)
+		logKey := fmt.Sprintf("RCL: WaitingToSatisfyJQ %v [%s] '%s'", r.pauseTime, kindName, key)
+		nName := k8u.KeyToNamespacedName(key)
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(*rr.gvk)
+		for {
+			klog.Warningf("%s...", logKey)
+			err := r.client.Get(ctx, nName, obj)
+			switch {
+			case k8u.IsNotFound(err):
+				klog.Warningf("%s: obj [%s] '%s' is not found, waiting to be created...", logKey, kind, key)
+			case err != nil:
+				klog.Warningf("%s: Error while fetching obj: %s", logKey, err)
+			default:
+				iter := jq.RunWithContext(ctx, obj.Object)
+				for {
+					v, ok := iter.Next()
+					if !ok {
+						break // for
+					}
+					if err, ok := v.(error); ok {
+						respChan <- err
+						return
+					}
+					res, ok := v.(bool)
+					switch {
+					case !ok:
+						respChan <- fmt.Errorf("JQ query result is not boolean")
+						return
+					case res:
+						respChan <- nil
+						return
+					default:
+						klog.Warningf("%s: is not satisfy to given JQ conditions, continue waiting...", logKey)
+					}
+				}
+
+				// res, ok, err := unstructured.NestedFieldCopy(obj.Object, pathSlice...)
+				// switch {
+				// case err != nil:
+				// 	respChan <- err
+				// 	return
+				// case ok && callback(res):
+				// 	respChan <- nil
+				// 	return
+				// case ok:
+				// 	klog.Warningf("%s: field '%s' is not satisfy to given conditions, continue waiting...", logKey, fp)
+				// default:
+				// 	klog.Warningf("%s: field '%s' is not found, continue waiting...", logKey, fp)
+				// }
+			}
+			select {
+			case <-r.mainloopContext.Done():
+				klog.Warningf(k8t.FmtKW, logKey, r.mainloopContext.Err())
+				respChan <- r.mainloopContext.Err()
+				return
+			case <-ctx.Done():
+				klog.Warningf(k8t.FmtKW, logKey, ctx.Err())
+				respChan <- ctx.Err()
+				return
+			case <-time.After(r.GetPauseTime()):
+				continue
+			}
+		}
+	}(kindName, key, jq, respChan)
+
+	return respChan, err
 }
 
 //-----------------------------------------------------------------------------

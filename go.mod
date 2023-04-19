@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/google/uuid v1.3.0
+	github.com/itchyny/gojq v0.12.12
 	github.com/k0kubun/pp v0.0.0-00010101000000-000000000000
 	github.com/mattbaird/jsonpatch v0.0.0-20230413205102-771768614e91
 	github.com/stretchr/testify v1.8.2
@@ -30,6 +31,7 @@ require (
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
+	github.com/itchyny/timefmt-go v0.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect

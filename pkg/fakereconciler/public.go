@@ -2,6 +2,7 @@ package fakereconciler
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
@@ -145,6 +146,8 @@ type FakeReconciler interface {
 	//
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
 	WaitToBeFinished(ctx context.Context, chanList []chan error) error
+
+	FetchAndPublishIfTestFailed(ctx context.Context, t *testing.T, kindName, key string) func()
 
 	// AddController -- add reconciler to the monitor loop while setup (before .Run(...) call)
 	AddController(gvk *schema.GroupVersionKind, rcl controllerRTreconcile.Reconciler) error

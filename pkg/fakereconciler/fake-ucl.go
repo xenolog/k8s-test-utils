@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"testing"
 	"time"
 
 	"github.com/itchyny/gojq"
 	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	k8u "github.com/xenolog/k8s-utils/pkg/utils"
+	yaml "gopkg.in/yaml.v3"
 	apimErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	klog "k8s.io/klog/v2"
@@ -574,6 +576,46 @@ func (r *fakeReconciler) WaitToFieldBeNotFound(ctx context.Context, kind, key, f
 		}
 	}
 	return err
+}
+
+// -----------------------------------------------------------------------------
+
+func (r *fakeReconciler) FetchAndPublishIfTestFailed(ctx context.Context, t *testing.T, kindName, key string) func() {
+	return func() {
+		if t.Failed() {
+			if r.mainloopContext == nil {
+				t.Logf("ERR: %s", MsgMainLoopIsNotStarted)
+				return
+			}
+			if ctx == nil {
+				ctx = r.mainloopContext
+			}
+			if err := ctx.Err(); err != nil {
+				t.Logf("ERR: %s", err)
+				return
+			}
+			rr, err := r.getKindStruct(kindName)
+			if err != nil {
+				t.Logf("ERR: %s", err)
+				return
+			}
+
+			nName := k8u.KeyToNamespacedName(key)
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(*rr.gvk)
+			err = r.client.Get(ctx, nName, obj)
+			if err != nil {
+				t.Logf("ERR while fetching obj: %s", err)
+				return
+			}
+			buff, err := yaml.Marshal(obj.Object)
+			if err != nil {
+				t.Logf("ERR while YAML marshaling: %s", err)
+				return
+			}
+			t.Logf("[%s] %s:\n%s\n", kindName, nName.String(), string(buff))
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------

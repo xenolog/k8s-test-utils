@@ -88,6 +88,7 @@ type FakeReconciler interface {
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	//
 	// Deprecated: Use WaitToSatisfyJQ(...) instead.
 	WaitToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) error
 
@@ -95,6 +96,7 @@ type FakeReconciler interface {
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use stored early
+	//
 	// Deprecated: Use WatchToSatisfyJQ(...) instead.
 	WatchToFieldSatisfyRE(ctx context.Context, kind, key, fieldPath, reString string) (chan error, error)
 
@@ -102,6 +104,7 @@ type FakeReconciler interface {
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	//
 	// Deprecated: Use WaitToSatisfyJQ(...) instead.
 	WaitToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) error
 
@@ -109,6 +112,7 @@ type FakeReconciler interface {
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	//
 	// Deprecated: Use WatchToSatisfyJQ(...) instead.
 	WatchToFieldBeChecked(ctx context.Context, kind, key, fieldPath string, callbackFunc func(any) bool) (chan error, error)
 
@@ -116,6 +120,7 @@ type FakeReconciler interface {
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	//
 	// Deprecated: Use WaitToSatisfyJQ(...) instead.
 	WaitToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) error
 
@@ -123,6 +128,7 @@ type FakeReconciler interface {
 	//
 	// The dot '.' is a separator in the fieldPath
 	// Pass nil instead context, to use fakeReconciler .Run(ctx) context
+	//
 	// Deprecated: Use WatchToSatisfyJQ(...) instead.
 	WatchToFieldBeNotFound(ctx context.Context, kind, key, fieldpath string) (chan error, error)
 

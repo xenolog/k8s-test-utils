@@ -11,10 +11,10 @@ import (
 	"github.com/thoas/go-funk"
 	k8t "github.com/xenolog/k8s-utils/pkg/types"
 	k8u "github.com/xenolog/k8s-utils/pkg/utils"
-	yaml "gopkg.in/yaml.v3"
 	apimErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	klog "k8s.io/klog/v2"
+	yaml "sigs.k8s.io/yaml"
 )
 
 func (r *fakeReconciler) SetPauseTime(ms time.Duration) {
@@ -213,7 +213,7 @@ func (r *fakeReconciler) WatchToBeCreated(ctx context.Context, kind, key string,
 		if !isReconciled {
 			return true
 		}
-		status, ok := in.(map[string]any)
+		status, ok := in.(map[string]any) // status exists if resource reconciled
 		return ok && len(status) > 0
 	})
 }
